@@ -26,6 +26,7 @@ export async function GET() {
       payment_methods: null,
       printers: null,
       operating_hours: null,
+      print_server_url: '',
     }
 
     if (data && Array.isArray(data)) {
@@ -66,6 +67,7 @@ export async function PUT(request: NextRequest) {
       { key: 'payment_methods', value: JSON.stringify(body.payment_methods || []) },
       { key: 'printers', value: JSON.stringify(body.printers || []) },
       { key: 'operating_hours', value: JSON.stringify(body.operating_hours || []) },
+      { key: 'print_server_url', value: String(body.print_server_url ?? '').trim() },
     ]
 
     // Guardar cada configuración usando upsert

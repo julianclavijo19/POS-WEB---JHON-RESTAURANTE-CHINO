@@ -258,6 +258,7 @@ function NuevaComandaContent() {
             orderNumber: order.orderNumber || order.order_number,
             tableName: order.table?.name || table?.name || '',
             waiterName: order.waiter?.name || '',
+            area: (order.table as any)?.area || (table as any)?.area || '',
             items: (order.items || []).map((item: any) => ({
               quantity: item.quantity,
               notes: item.notes || '',

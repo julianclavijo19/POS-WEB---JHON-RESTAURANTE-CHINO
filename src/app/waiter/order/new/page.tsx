@@ -180,6 +180,7 @@ export default function NewOrderPage() {
           orderNumber: kitchenOrder.order_number || order.orderNumber,
           tableName: kitchenOrder.table?.name || '',
           waiterName: kitchenOrder.waiter?.name || session?.user?.name || '',
+          area: (kitchenOrder.table as any)?.area || '',
           items: (kitchenOrder.items || cart).map((item: any) => ({
             quantity: item.quantity,
             notes: item.notes || '',

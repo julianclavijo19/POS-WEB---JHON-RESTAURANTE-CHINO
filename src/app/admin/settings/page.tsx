@@ -28,6 +28,7 @@ interface Settings {
   payment_methods: PaymentMethod[]
   printers: PrinterConfig[]
   operating_hours: OperatingHours[]
+  print_server_url: string
 }
 
 interface PaymentMethod {
@@ -81,6 +82,7 @@ export default function SettingsPage() {
     currency: 'COP',
     payment_methods: defaultPaymentMethods, printers: [],
     operating_hours: defaultOperatingHours,
+    print_server_url: '',
   })
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -112,7 +114,11 @@ export default function SettingsPage() {
             payment_methods: data.payment_methods || defaultPaymentMethods,
             printers: data.printers || [],
             operating_hours: data.operating_hours || defaultOperatingHours,
+            print_server_url: data.print_server_url ?? '',
           }))
+          if (typeof window !== 'undefined' && data.print_server_url != null) {
+            localStorage.setItem('print_server_url', String(data.print_server_url).trim())
+          }
         }
       }
     } catch (error) {
@@ -131,6 +137,9 @@ export default function SettingsPage() {
       if (res.ok) {
         toast.success('Configuración guardada exitosamente')
         saveLogoUrl(settings.logo_url || null)
+        if (typeof window !== 'undefined' && settings.print_server_url != null) {
+          localStorage.setItem('print_server_url', String(settings.print_server_url).trim())
+        }
       }
       else toast.error('Error al guardar')
     } catch { toast.error('Error al guardar configuración') }
@@ -437,6 +446,26 @@ export default function SettingsPage() {
       {/* Printers Tab */}
       {activeTab === 'printers' && (
         <div className="space-y-6">
+          {/* URL del servidor de impresión (para app en Vercel / red) */}
+          <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
+            <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+              <Printer className="h-5 w-5 text-gray-600" />
+              Servidor de impresión (comandas en red)
+            </h2>
+            <p className="text-sm text-gray-500">
+              Si el sistema está en internet (Vercel), indique la URL del servidor de impresión que corre en su red local (ej: http://192.168.1.50:3001). Ese servidor debe estar encendido y accesible desde los dispositivos que usan la app.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">URL del servidor de impresión</label>
+              <input
+                type="url"
+                value={settings.print_server_url}
+                onChange={(e) => setSettings({ ...settings, print_server_url: e.target.value })}
+                placeholder="http://192.168.1.50:3001"
+                className="w-full max-w-md px-4 py-2.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              />
+            </div>
+          </div>
           <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-gray-900 flex items-center gap-2">

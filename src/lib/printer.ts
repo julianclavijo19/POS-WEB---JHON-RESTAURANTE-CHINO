@@ -12,6 +12,7 @@ export interface OrderData {
   orderNumber: string | number
   tableName?: string
   waiterName?: string
+  area?: string
   items: OrderItem[]
   subtotal?: number
   tax?: number
@@ -363,16 +364,43 @@ export async function printTicket(content: string, title: string = 'Ticket', inc
   })
 }
 
-// URL del servidor de impresión térmica
-const PRINT_SERVER_URL = 'http://localhost:3001'
+/** Obtiene la URL del servidor de impresión (configurable desde Admin o variable de entorno). */
+async function getPrintServerUrl(): Promise<string> {
+  if (typeof window === 'undefined') {
+    return (process.env.NEXT_PUBLIC_PRINT_SERVER_URL || '').trim() || 'http://localhost:3001'
+  }
+  let url = localStorage.getItem('print_server_url') || ''
+  if (url) return url.replace(/\/$/, '')
+  try {
+    const res = await fetch('/api/settings')
+    if (res.ok) {
+      const data = await res.json()
+      url = (data.print_server_url || process.env.NEXT_PUBLIC_PRINT_SERVER_URL || '').trim()
+      if (url) {
+        url = url.replace(/\/$/, '')
+        localStorage.setItem('print_server_url', url)
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return url || (process.env.NEXT_PUBLIC_PRINT_SERVER_URL || '').trim() || 'http://localhost:3001'
+}
 
 // Imprimir ticket de comanda para cocina (usa impresora térmica en red)
 export async function printKitchenTicket(order: OrderData): Promise<boolean> {
   try {
+    const baseUrl = await getPrintServerUrl()
+    if (!baseUrl) {
+      console.warn('No hay URL de servidor de impresión configurada. Configure en Admin → Impresoras.')
+      const content = generateKitchenTicket(order)
+      return printTicket(content, `Comanda #${order.orderNumber}`)
+    }
     // Preparar datos para el servidor de impresión
     const printData = {
       mesa: order.tableName || 'N/A',
       mesero: order.waiterName || 'N/A',
+      area: order.area || 'N/A',
       items: order.items.map(item => ({
         nombre: item.product.name,
         cantidad: item.quantity,
@@ -385,8 +413,8 @@ export async function printKitchenTicket(order: OrderData): Promise<boolean> {
       })
     }
 
-    // Enviar al servidor de impresión local
-    const response = await fetch(`${PRINT_SERVER_URL}/print-kitchen`, {
+    // Enviar al servidor de impresión (local o en red)
+    const response = await fetch(`${baseUrl}/print-kitchen`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(printData)
@@ -410,10 +438,12 @@ export async function printKitchenTicket(order: OrderData): Promise<boolean> {
   }
 }
 
-// Enviar datos directamente al servidor de impresión local
+// Enviar datos directamente al servidor de impresión
 export async function sendToPrintServer(endpoint: string, data: any): Promise<boolean> {
   try {
-    const response = await fetch(`${PRINT_SERVER_URL}${endpoint}`, {
+    const baseUrl = await getPrintServerUrl()
+    if (!baseUrl) return false
+    const response = await fetch(`${baseUrl}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -442,12 +472,14 @@ export interface CorrectionData {
 
 export async function printCorrectionTicket(data: CorrectionData): Promise<boolean> {
   try {
+    const baseUrl = await getPrintServerUrl()
+    if (!baseUrl) return false
     const printData = {
       ...data,
       hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
     }
 
-    const response = await fetch(`${PRINT_SERVER_URL}/print-correction`, {
+    const response = await fetch(`${baseUrl}/print-correction`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(printData)

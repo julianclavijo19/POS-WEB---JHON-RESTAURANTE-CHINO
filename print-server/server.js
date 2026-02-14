@@ -12,16 +12,16 @@ const ThermalPrinter = require('node-thermal-printer').printer;
 const PrinterTypes = require('node-thermal-printer').types;
 
 // ==========================================
-// CONFIGURACIÓN
+// CONFIGURACIÓN (IP/puerto de impresora por env: PRINTER_IP, PRINTER_PORT)
 // ==========================================
 const CONFIG = {
   server: {
-    port: 3001,
+    port: parseInt(process.env.PORT || '3001', 10),
     host: '0.0.0.0' // Escuchar en todas las interfaces
   },
   printer: {
-    ip: '192.168.1.110',
-    port: 9100,
+    ip: process.env.PRINTER_IP || '192.168.1.110',
+    port: parseInt(process.env.PRINTER_PORT || '9100', 10),
     timeout: 5000, // 5 segundos de timeout
     retries: 3,    // Intentos de reconexión
     retryDelay: 1000 // 1 segundo entre reintentos
@@ -545,6 +545,22 @@ app.listen(CONFIG.server.port, CONFIG.server.host, () => {
   console.log('╚══════════════════════════════════════════════════════╝');
   console.log('\n');
   logInfo('Servidor iniciado correctamente');
+
+  // Comprobación periódica de conectividad con la impresora (cada 60 s)
+  const CHECK_INTERVAL_MS = 60000;
+  setInterval(async () => {
+    try {
+      const printer = createPrinter();
+      const connected = await printer.isPrinterConnected();
+      if (connected) {
+        logInfo('Impresora en red: OK');
+      } else {
+        logError('Impresora en red: sin conexión (se reintentará en el próximo envío)');
+      }
+    } catch (err) {
+      logError('Comprobación de impresora', { error: err.message });
+    }
+  }, CHECK_INTERVAL_MS);
 });
 
 // Manejo de cierre graceful

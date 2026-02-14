@@ -276,6 +276,23 @@ print-server/
 
 ---
 
+## 🌐 Uso con la app desplegada en Vercel
+
+Cuando el sistema de comandas está en **Vercel** (internet), el navegador no puede usar `localhost:3001`. Hay que indicar la **URL del servidor de impresión** que corre en tu red local:
+
+1. **Ejecuta el print-server** en un PC de la red del restaurante (el mismo que tenga acceso a la impresora por Ethernet), con PM2 o `npm start`.
+2. **Anota la IP** de ese PC en la red (ej: `192.168.1.50`). La URL será `http://192.168.1.50:3001`.
+3. En la **app en Vercel**: entra como **Admin** → **Configuración** → pestaña **Impresoras** → en **URL del servidor de impresión** escribe `http://192.168.1.50:3001` → Guardar.
+4. Los dispositivos que usen la app (meseros, cajero) deben estar en la **misma red local** que el PC donde corre el print-server, para que el navegador pueda conectar a esa IP.
+
+Variables de entorno del print-server (opcional, en el PC donde corre):
+
+- `PRINTER_IP`: IP de la impresora (ej: 192.168.1.110)
+- `PRINTER_PORT`: Puerto de la impresora (ej: 9100)
+- `PORT`: Puerto del servidor (por defecto 3001)
+
+---
+
 ## 🔒 Seguridad
 
 En producción, considera:

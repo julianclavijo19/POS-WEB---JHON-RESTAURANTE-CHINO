@@ -87,7 +87,29 @@ export async function POST(
     }
     console.log('✓ Orden obtenida:', order?.id)
 
-    // La impresión se maneja desde el cliente (browser) que está en la red local
+    // Encolar comanda para el print-server (polling)
+    const tableName = order?.table?.name || (order?.table as any)?.number != null ? `Mesa ${(order?.table as any)?.number}` : 'N/A'
+    const areaName = (order?.table as any)?.area?.name || 'N/A'
+    const waiterName = order?.waiter?.name || 'N/A'
+    const kitchenPayload = {
+      mesa: tableName,
+      mesero: waiterName,
+      area: areaName,
+      items: (order?.items || []).map((item: any) => ({
+        nombre: item?.product?.name || 'Producto',
+        cantidad: item?.quantity || 1,
+        notas: item?.notes || '',
+      })),
+      total: Number(order?.total) || 0,
+      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+    }
+    await supabase
+      .from('print_queue')
+      .insert({ type: 'kitchen', payload: kitchenPayload })
+      .then(({ error: eqErr }) => {
+        if (eqErr) console.error('Error encolando impresión:', eqErr)
+      })
+
     console.log('✅ Enviando respuesta exitosa')
     return NextResponse.json(order)
   } catch (error) {

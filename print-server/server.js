@@ -6,6 +6,8 @@
  * y las imprime en la impresora térmica de cocina.
  */
 
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const ThermalPrinter = require('node-thermal-printer').printer;
@@ -561,6 +563,54 @@ app.listen(CONFIG.server.port, CONFIG.server.host, () => {
       logError('Comprobación de impresora', { error: err.message });
     }
   }, CHECK_INTERVAL_MS);
+
+  // Polling a Vercel: cada 1 s consultar cola de impresión
+  const POLL_BASE_URL = (process.env.VERCEL_APP_URL || process.env.PRINT_POLLING_URL || '').replace(/\/$/, '');
+  const POLL_SECRET = process.env.PRINT_POLLING_SECRET || '';
+  const POLL_INTERVAL_MS = 1000;
+
+  if (POLL_BASE_URL && POLL_SECRET) {
+    logInfo('Polling a Vercel activado', { url: POLL_BASE_URL + '/api/print-queue', interval: POLL_INTERVAL_MS + 'ms' });
+    setInterval(async () => {
+      try {
+        const res = await fetch(POLL_BASE_URL + '/api/print-queue', {
+          method: 'GET',
+          headers: { 'x-print-secret': POLL_SECRET },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const jobs = data.jobs || [];
+        if (jobs.length === 0) return;
+
+        const printedIds = [];
+        for (const job of jobs) {
+          try {
+            if (job.type === 'kitchen') {
+              await printWithRetry(() => printKitchenOrder(job.payload));
+              printedIds.push(job.id);
+            } else if (job.type === 'correction') {
+              await printWithRetry(() => printCorrectionOrder(job.payload));
+              printedIds.push(job.id);
+            }
+          } catch (err) {
+            logError('Error imprimiendo trabajo ' + job.id, { error: err.message });
+          }
+        }
+
+        if (printedIds.length > 0) {
+          await fetch(POLL_BASE_URL + '/api/print-queue', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'x-print-secret': POLL_SECRET },
+            body: JSON.stringify({ printedIds }),
+          });
+        }
+      } catch (err) {
+        // Silenciar errores de red para no llenar logs
+      }
+    }, POLL_INTERVAL_MS);
+  } else {
+    logInfo('Polling a Vercel desactivado (configure VERCEL_APP_URL y PRINT_POLLING_SECRET para activar)');
+  }
 });
 
 // Manejo de cierre graceful

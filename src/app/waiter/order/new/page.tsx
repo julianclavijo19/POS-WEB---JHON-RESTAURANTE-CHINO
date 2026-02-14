@@ -15,7 +15,6 @@ import {
   ShoppingCart,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { printKitchenTicket } from '@/lib/printer'
 
 interface Category {
   id: string
@@ -172,27 +171,7 @@ export default function NewOrderPage() {
       })
 
       if (!kitchenRes.ok) throw new Error('Error sending to kitchen')
-      const kitchenOrder = await kitchenRes.json()
-
-      // Imprimir comanda desde el navegador (red local)
-      try {
-        await printKitchenTicket({
-          orderNumber: kitchenOrder.order_number || order.orderNumber,
-          tableName: kitchenOrder.table?.name || '',
-          waiterName: kitchenOrder.waiter?.name || session?.user?.name || '',
-          area: (kitchenOrder.table as any)?.area || '',
-          items: (kitchenOrder.items || cart).map((item: any) => ({
-            quantity: item.quantity,
-            notes: item.notes || '',
-            product: { name: item.product?.name || item.name || 'Producto', price: item.product?.price || item.price || 0 }
-          })),
-          total: kitchenOrder.total || subtotal,
-          createdAt: kitchenOrder.created_at || kitchenOrder.createdAt
-        })
-      } catch (printErr) {
-        console.error('Error imprimiendo:', printErr)
-      }
-
+      // La comanda se encola en send-to-kitchen; el print-server la imprime por polling
       toast.success('¡Pedido enviado a cocina!')
       router.push('/waiter')
     } catch (error) {

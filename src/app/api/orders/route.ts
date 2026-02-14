@@ -289,6 +289,26 @@ export async function POST(request: Request) {
     }
     console.log('🪑 Mesa:', tableName, 'Área:', areaName, 'Mesero:', waiterName)
 
+    // Encolar comanda para el servidor de impresión (polling)
+    const kitchenPrintPayload = {
+      mesa: tableName,
+      mesero: waiterName,
+      area: areaName || 'N/A',
+      items: orderItems.map((item: any) => ({
+        nombre: products?.find((p: any) => p.id === item.product_id)?.name || 'Producto',
+        cantidad: item.quantity,
+        notas: item.notes || '',
+      })),
+      total: Number(total) || 0,
+      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+    }
+    await supabase
+      .from('print_queue')
+      .insert({ type: 'kitchen', payload: kitchenPrintPayload })
+      .then(({ error }) => {
+        if (error) console.error('Error encolando impresión:', error)
+      })
+
     // Obtener la orden completa para devolver al cliente
     const { data: fullOrder } = await supabase
       .from('orders')
@@ -301,7 +321,7 @@ export async function POST(request: Request) {
       .eq('id', order.id)
       .single()
 
-    // Devolver orden - la impresión se maneja desde el cliente (browser)
+    // Devolver orden; la impresión la hace el print-server por polling
     return NextResponse.json({
       ...(fullOrder || order),
       printResult: { fromClient: true }

@@ -276,20 +276,40 @@ print-server/
 
 ---
 
-## 🌐 Uso con la app desplegada en Vercel
+## 🌐 Uso con la app desplegada en Vercel (polling)
 
-Cuando el sistema de comandas está en **Vercel** (internet), el navegador no puede usar `localhost:3001`. Hay que indicar la **URL del servidor de impresión** que corre en tu red local:
+Con la app en **Vercel**, la impresión se hace por **polling**: el print-server consulta a Vercel cada **1 segundo** y imprime los trabajos encolados. No hace falta que el navegador alcance al print-server.
 
-1. **Ejecuta el print-server** en un PC de la red del restaurante (el mismo que tenga acceso a la impresora por Ethernet), con PM2 o `npm start`.
-2. **Anota la IP** de ese PC en la red (ej: `192.168.1.50`). La URL será `http://192.168.1.50:3001`.
-3. En la **app en Vercel**: entra como **Admin** → **Configuración** → pestaña **Impresoras** → en **URL del servidor de impresión** escribe `http://192.168.1.50:3001` → Guardar.
-4. Los dispositivos que usen la app (meseros, cajero) deben estar en la **misma red local** que el PC donde corre el print-server, para que el navegador pueda conectar a esa IP.
+### Pasos
 
-Variables de entorno del print-server (opcional, en el PC donde corre):
+1. **En Vercel** (Dashboard del proyecto → Settings → Environment Variables):
+   - Añade `PRINT_POLLING_SECRET` con el valor secreto (el mismo que usarás en el print-server; ver más abajo).
 
-- `PRINTER_IP`: IP de la impresora (ej: 192.168.1.110)
-- `PRINTER_PORT`: Puerto de la impresora (ej: 9100)
-- `PORT`: Puerto del servidor (por defecto 3001)
+2. **Base de datos**: crear la tabla de cola ejecutando el archivo `print-queue-setup.sql` en Supabase (SQL Editor).
+
+3. **En el PC donde corre el print-server**: crea un archivo `.env` dentro de la carpeta `print-server` (puedes copiar desde `.env.example`):
+   - `VERCEL_APP_URL`: URL de la app (ej: `https://pos-web-jhon-restaurante-chino.vercel.app`), **sin barra final**.
+   - `PRINT_POLLING_SECRET`: el **mismo** valor que pusiste en Vercel.
+   - Opcional: `PRINTER_IP`, `PRINTER_PORT` si tu impresora usa otra IP/puerto.
+
+4. **Arrancar (o reiniciar) el print-server**:
+   ```powershell
+   cd print-server
+   npm start
+   ```
+   O con PM2: `pm2 restart print-server`. Debes ver en logs: `Polling a Vercel activado`.
+
+Cada segundo el servidor hace `GET .../api/print-queue`, imprime los trabajos pendientes y marca como impresos con `PATCH .../api/print-queue`.
+
+Variables de entorno del print-server:
+
+| Variable | Descripción |
+|----------|-------------|
+| `VERCEL_APP_URL` o `PRINT_POLLING_URL` | URL de la app en Vercel (ej: https://tu-app.vercel.app) |
+| `PRINT_POLLING_SECRET` | Secreto que debe coincidir con el de Vercel |
+| `PRINTER_IP` | IP de la impresora (ej: 192.168.1.110) |
+| `PRINTER_PORT` | Puerto de la impresora (ej: 9100) |
+| `PORT` | Puerto del servidor (por defecto 3001) |
 
 ---
 

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
-import { printKitchenTicket, sendToPrintServer } from '@/lib/printer'
+import { sendToPrintServer } from '@/lib/printer'
 
 interface Product {
   id: string
@@ -252,31 +252,8 @@ function NuevaComandaContent() {
         const order = await res.json()
         clearDraft()
 
-        // Imprimir comanda desde el navegador (red local)
-        try {
-          const printSuccess = await printKitchenTicket({
-            orderNumber: order.orderNumber || order.order_number,
-            tableName: order.table?.name || table?.name || '',
-            waiterName: order.waiter?.name || '',
-            area: (order.table as any)?.area || (table as any)?.area || '',
-            items: (order.items || []).map((item: any) => ({
-              quantity: item.quantity,
-              notes: item.notes || '',
-              product: { name: item.product?.name || 'Producto', price: item.product?.price || 0 }
-            })),
-            total: order.total || 0,
-            createdAt: order.created_at || order.createdAt
-          })
-          if (printSuccess) {
-            toast.success('Pedido enviado - Comanda impresa')
-          } else {
-            toast.success('Pedido enviado')
-            toast.error('No se pudo imprimir la comanda')
-          }
-        } catch {
-          toast.success('Pedido enviado')
-          toast.error('Error conectando con impresora')
-        }
+        // La comanda se encola en el API; el print-server la imprime por polling
+        toast.success('Pedido enviado. La comanda se imprimirá en cocina.')
 
         // Volver a la página correspondiente
         router.push(fromCajero ? '/cajero/tomar-pedido' : '/mesero')

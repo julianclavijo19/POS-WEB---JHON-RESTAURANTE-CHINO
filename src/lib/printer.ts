@@ -470,10 +470,36 @@ export interface CorrectionData {
   }[]
 }
 
+/** Encolar corrección para que la imprima el print-server por polling (recomendado con app en Vercel). */
+export async function enqueueCorrection(data: CorrectionData): Promise<boolean> {
+  try {
+    const payload = {
+      ...data,
+      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+    }
+    const res = await fetch('/api/print-queue', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'correction', payload }),
+    })
+    if (!res.ok) return false
+    const json = await res.json()
+    return json?.ok === true
+  } catch (error) {
+    console.error('Error encolando corrección:', error)
+    return false
+  }
+}
+
 export async function printCorrectionTicket(data: CorrectionData): Promise<boolean> {
+  // Por defecto encolar (polling); así funciona con la app en Vercel
+  const useQueue = typeof window !== 'undefined' && localStorage.getItem('print_via_queue') !== 'false'
+  if (useQueue) {
+    return enqueueCorrection(data)
+  }
   try {
     const baseUrl = await getPrintServerUrl()
-    if (!baseUrl) return false
+    if (!baseUrl) return enqueueCorrection(data)
     const printData = {
       ...data,
       hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
@@ -492,11 +518,11 @@ export async function printCorrectionTicket(data: CorrectionData): Promise<boole
       return true
     } else {
       console.error('⚠️ Error imprimiendo corrección:', result.message)
-      return false
+      return enqueueCorrection(data)
     }
   } catch (error) {
     console.error('❌ Error conectando con servidor de impresión para corrección:', error)
-    return false
+    return enqueueCorrection(data)
   }
 }
 

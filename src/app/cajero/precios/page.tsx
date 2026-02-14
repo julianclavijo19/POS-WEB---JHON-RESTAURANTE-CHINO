@@ -17,8 +17,9 @@ interface Product {
   category: Category | string
   description?: string
   sku?: string
-  is_active: boolean
-  in_stock: boolean
+  is_active?: boolean
+  in_stock?: boolean
+  is_available?: boolean
 }
 
 export default function PreciosPage() {
@@ -77,7 +78,7 @@ export default function PreciosPage() {
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesCategory = categoryFilter === 'all' || getCategoryId(product.category) === categoryFilter
-    return matchesSearch && matchesCategory && product.is_active
+    return matchesSearch && matchesCategory && (product.is_active !== false)
   })
 
   // Agrupar productos por categoría
@@ -143,7 +144,7 @@ export default function PreciosPage() {
               <div 
                 key={product.id} 
                 className={`p-4 hover:bg-gray-50 cursor-pointer flex items-center justify-between ${
-                  !product.in_stock ? 'opacity-50' : ''
+                  (product.in_stock === false || product.is_available === false) ? 'opacity-60' : ''
                 }`}
                 onClick={() => setSelectedProduct(product)}
               >
@@ -151,7 +152,7 @@ export default function PreciosPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-gray-900">{product.name}</span>
-                      {!product.in_stock && (
+                      {(product.in_stock === false || product.is_available === false) && (
                         <span className="text-xs bg-gray-200 px-2 py-0.5 rounded text-gray-600">Agotado</span>
                       )}
                     </div>

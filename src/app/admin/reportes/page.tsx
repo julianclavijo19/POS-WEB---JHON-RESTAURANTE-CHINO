@@ -284,25 +284,21 @@ export default function ReportesPage() {
                 <div className="space-y-3">
                   {hourlyReport.map((hour) => (
                     <div key={hour.hour} className="flex items-center gap-4">
-                      <div className="w-20 text-sm text-gray-600 text-right">
+                      <div className="w-20 text-sm text-gray-600 text-right shrink-0">
                         {formatHour(hour.hour)}
                       </div>
-                      <div className="flex-1 h-8 bg-gray-100 rounded-lg overflow-hidden relative">
+                      <div className="flex-1 h-8 bg-gray-100 rounded-lg overflow-hidden flex items-center gap-2">
                         <div 
-                          className="h-full bg-gray-900 rounded-lg transition-all"
-                          style={{ width: `${(hour.total / maxHourlyTotal) * 100}%` }}
+                          className="h-full bg-gray-900 rounded-lg transition-all shrink-0"
+                          style={{ width: `${(hour.total / maxHourlyTotal) * 100}%`, minWidth: hour.total > 0 ? '4px' : 0 }}
                         />
                         {hour.total > 0 && (
-                          <div className="absolute inset-0 flex items-center px-3">
-                            <span className={`text-sm font-medium ${
-                              hour.total / maxHourlyTotal > 0.5 ? 'text-white' : 'text-gray-900'
-                            }`}>
-                              {formatCurrency(hour.total)}
-                            </span>
-                          </div>
+                          <span className="text-sm font-medium text-gray-900 shrink-0">
+                            {formatCurrency(hour.total)}
+                          </span>
                         )}
                       </div>
-                      <div className="w-16 text-sm text-gray-500 text-right">
+                      <div className="w-16 text-sm text-gray-500 text-right shrink-0">
                         {hour.orders} ord.
                       </div>
                     </div>

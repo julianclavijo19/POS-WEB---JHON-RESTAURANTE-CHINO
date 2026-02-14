@@ -75,49 +75,41 @@ export default function ReimpresionesPage() {
   }, [fetchData])
 
   const handlePrint = async (order: Order, printType: 'TICKET' | 'INVOICE') => {
-    setPrinting(true)
+    const payment = order.payments?.[0]
+    const orderData: OrderData = {
+      orderNumber: parseInt(order.order_number) || 0,
+      tableName: order.table?.name || 'Para llevar',
+      waiterName: order.waiter?.name || '',
+      createdAt: order.created_at,
+      items: order.items.map(item => ({
+        quantity: item.quantity,
+        product: { name: item.product.name },
+        unitPrice: item.unit_price
+      })),
+      subtotal: order.total / 1.08,
+      tax: order.total - (order.total / 1.08),
+      total: order.total,
+      discount: 0,
+      paymentMethod: payment?.method || 'CASH',
+      receivedAmount: payment?.received_amount || order.total,
+      changeAmount: payment?.change_amount || 0
+    }
+    setSelectedOrder(null)
+    setPrinting(false)
+    toast.success(`Abriendo ${printType === 'TICKET' ? 'ticket' : 'factura'}...`)
     try {
-      const payment = order.payments?.[0]
-      
-      const orderData: OrderData = {
-        orderNumber: parseInt(order.order_number) || 0,
-        tableName: order.table?.name || 'Para llevar',
-        waiterName: order.waiter?.name || '',
-        createdAt: order.created_at,
-        items: order.items.map(item => ({
-          quantity: item.quantity,
-          product: { name: item.product.name },
-          unitPrice: item.unit_price
-        })),
-        subtotal: order.total / 1.08,
-        tax: order.total - (order.total / 1.08),
-        total: order.total,
-        discount: 0,
-        paymentMethod: payment?.method || 'CASH',
-        receivedAmount: payment?.received_amount || order.total,
-        changeAmount: payment?.change_amount || 0
-      }
-
       await printInvoice(orderData)
-      
       await fetch('/api/cajero/reimpresiones', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          order_id: order.id,
-          print_type: printType
-        })
+        body: JSON.stringify({ order_id: order.id, print_type: printType })
       })
-
-      toast.success(`${printType === 'TICKET' ? 'Ticket' : 'Factura'} reimpreso correctamente`)
-      fetchData()
+      toast.success(`${printType === 'TICKET' ? 'Ticket' : 'Factura'} reimpreso`)
     } catch (error) {
       console.error('Error al reimprimir:', error)
       toast.error('Error al reimprimir')
-    } finally {
-      setPrinting(false)
-      setSelectedOrder(null)
     }
+    fetchData()
   }
 
   const filteredOrders = orders.filter(o => {

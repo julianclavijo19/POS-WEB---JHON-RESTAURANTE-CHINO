@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
-import { printInvoice, getAutoPrintSettings, type OrderData } from '@/lib/printer'
+import { printInvoice, getAutoPrintSettings, openCashDrawer, type OrderData } from '@/lib/printer'
 
 interface OrderItem {
   id: string
@@ -180,21 +180,41 @@ function CobrarContent() {
 
     setProcessing(true)
     try {
+      const tipAmount = calculateTip()
+      const discountAmount = calculateDiscount()
+      const discountTypeApi = discountType === 'percent' ? 'percentage' : 'fixed'
+
+      let body: Record<string, unknown> = {
+        payment_method: paymentMethod === 'mixed' ? 'CASH' : paymentMethod,
+        tip: tipAmount,
+        discount: discountAmount,
+        discount_type: discountTypeApi,
+        received_amount: paymentMethod === 'cash' ? receivedAmount : total,
+        change_amount: calculateChange(),
+        mixed_payments: paymentMethod === 'mixed' ? mixedPayments : undefined
+      }
+
+      if (splitMode && splitWays >= 2) {
+        const perPerson = total / splitWays
+        const splitPayments = Array.from({ length: splitWays }, (_, i) => ({
+          method: i === splitWays - 1 ? (paymentMethod === 'mixed' ? (mixedPayments[0]?.method || 'CASH') : paymentMethod) : (paymentMethod === 'mixed' ? (mixedPayments[0]?.method || 'CASH') : paymentMethod),
+          amount: i === splitWays - 1 ? Math.round((total - perPerson * (splitWays - 1)) * 100) / 100 : Math.round(perPerson * 100) / 100
+        }))
+        body = {
+          ...body,
+          split_payments: splitPayments,
+          payment_method: paymentMethod === 'mixed' ? (mixedPayments[0]?.method || 'CASH') : paymentMethod
+        }
+      }
+
       const res = await fetch(`/api/orders/${selectedOrder.id}/pay`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          payment_method: paymentMethod,
-          tip: calculateTip(),
-          discount: calculateDiscount(),
-          received_amount: paymentMethod === 'cash' ? receivedAmount : total,
-          change_amount: calculateChange(),
-          mixed_payments: paymentMethod === 'mixed' ? mixedPayments : undefined
-        })
+        body: JSON.stringify(body)
       })
 
       if (res.ok) {
-        // Imprimir factura automáticamente
+        openCashDrawer().catch(() => {})
         const printSettings = getAutoPrintSettings()
         if (printSettings.invoice) {
           await handlePrintInvoice()

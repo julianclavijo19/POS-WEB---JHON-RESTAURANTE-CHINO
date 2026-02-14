@@ -10,9 +10,27 @@ function authPoller(request: NextRequest): boolean {
   return !!SECRET && SECRET === header
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Máximo tiempo que la API espera con long polling (Vercel ~10s límite). */
+const LONG_POLL_WAIT_MS = 8000
+const LONG_POLL_CHECK_MS = 500
+
+async function fetchPendingJobs() {
+  const { data, error } = await supabase
+    .from('print_queue')
+    .select('id, type, payload, created_at')
+    .is('printed_at', null)
+    .order('created_at', { ascending: true })
+    .limit(20)
+  if (error) throw error
+  return data || []
+}
+
 /**
- * GET - El print-server hace polling cada segundo.
- * Devuelve trabajos pendientes (printed_at IS NULL).
+ * GET - Long polling: mantiene la conexión abierta hasta que haya trabajos o timeout.
+ * ?longPoll=1 → espera hasta LONG_POLL_WAIT_MS revisando cada LONG_POLL_CHECK_MS (menos invocaciones en Vercel).
+ * Sin longPoll → respuesta inmediata (comportamiento anterior).
  * Requiere header: x-print-secret: <PRINT_POLLING_SECRET>
  */
 export async function GET(request: NextRequest) {
@@ -20,15 +38,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
   try {
-    const { data, error } = await supabase
-      .from('print_queue')
-      .select('id, type, payload, created_at')
-      .is('printed_at', null)
-      .order('created_at', { ascending: true })
-      .limit(20)
+    const { searchParams } = new URL(request.url)
+    const longPoll = searchParams.get('longPoll') === '1' || searchParams.get('longPoll') === 'true'
 
-    if (error) throw error
-    return NextResponse.json({ jobs: data || [] })
+    let jobs = await fetchPendingJobs()
+    if (jobs.length > 0) {
+      return NextResponse.json({ jobs })
+    }
+    if (!longPoll) {
+      return NextResponse.json({ jobs: [] })
+    }
+
+    // Long poll: esperar hasta LONG_POLL_WAIT_MS revisando cada LONG_POLL_CHECK_MS
+    const deadline = Date.now() + LONG_POLL_WAIT_MS
+    while (Date.now() < deadline) {
+      await sleep(LONG_POLL_CHECK_MS)
+      jobs = await fetchPendingJobs()
+      if (jobs.length > 0) {
+        return NextResponse.json({ jobs })
+      }
+    }
+    return NextResponse.json({ jobs: [] })
   } catch (e: any) {
     console.error('Error GET print-queue:', e)
     return NextResponse.json({ error: e?.message || 'Error' }, { status: 500 })

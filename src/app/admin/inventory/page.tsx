@@ -261,6 +261,11 @@ export default function InventoryPage() {
       const ingredient = ingredients.find(i => i.id === movementForm.ingredient_id)
       if (!ingredient) return
 
+      if (movementForm.type === 'OUT' && movementForm.quantity > ingredient.current_stock) {
+        toast.error(`No hay suficiente stock. Disponible: ${ingredient.current_stock} ${ingredient.unit}`)
+        return
+      }
+
       const quantity = movementForm.type === 'OUT' ? -movementForm.quantity : movementForm.quantity
       
       // Registrar movimiento

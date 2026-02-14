@@ -338,6 +338,37 @@ app.get('/health', (req, res) => {
 });
 
 /**
+ * Abrir caja monedera (conectada a la impresora por LAN)
+ * Lo llama el sistema al procesar un cobro.
+ */
+app.post('/open-drawer', async (req, res) => {
+  try {
+    const printer = createPrinter();
+    const isConnected = await printer.isPrinterConnected();
+    if (!isConnected) {
+      return res.status(503).json({
+        success: false,
+        error: 'Impresora no conectada'
+      });
+    }
+    if (typeof printer.openCashDrawer === 'function') {
+      printer.openCashDrawer();
+      await printer.execute();
+    } else {
+      printer.raw(Buffer.from([0x1b, 0x70, 0x00, 0x19, 0x19]));
+      await printer.execute();
+    }
+    res.json({ success: true, message: 'Caja abierta' });
+  } catch (error) {
+    logError('Error abriendo caja', { error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * Verificar estado de la impresora
  */
 app.get('/printer-status', async (req, res) => {
@@ -564,52 +595,58 @@ app.listen(CONFIG.server.port, CONFIG.server.host, () => {
     }
   }, CHECK_INTERVAL_MS);
 
-  // Polling a Vercel: cada 1 s consultar cola de impresión
+  // Long polling a Vercel: una sola petición en bucle (menos invocaciones = ahorro plan Vercel)
   const POLL_BASE_URL = (process.env.VERCEL_APP_URL || process.env.PRINT_POLLING_URL || '').replace(/\/$/, '');
   const POLL_SECRET = process.env.PRINT_POLLING_SECRET || '';
-  const POLL_INTERVAL_MS = 1000;
 
   if (POLL_BASE_URL && POLL_SECRET) {
-    logInfo('Polling a Vercel activado', { url: POLL_BASE_URL + '/api/print-queue', interval: POLL_INTERVAL_MS + 'ms' });
-    setInterval(async () => {
-      try {
-        const res = await fetch(POLL_BASE_URL + '/api/print-queue', {
-          method: 'GET',
-          headers: { 'x-print-secret': POLL_SECRET },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        const jobs = data.jobs || [];
-        if (jobs.length === 0) return;
+    const pollUrl = POLL_BASE_URL + '/api/print-queue?longPoll=1';
+    logInfo('Long polling a Vercel activado', { url: pollUrl });
 
-        const printedIds = [];
-        for (const job of jobs) {
-          try {
-            if (job.type === 'kitchen') {
-              await printWithRetry(() => printKitchenOrder(job.payload));
-              printedIds.push(job.id);
-            } else if (job.type === 'correction') {
-              await printWithRetry(() => printCorrectionOrder(job.payload));
-              printedIds.push(job.id);
-            }
-          } catch (err) {
-            logError('Error imprimiendo trabajo ' + job.id, { error: err.message });
-          }
-        }
-
-        if (printedIds.length > 0) {
-          await fetch(POLL_BASE_URL + '/api/print-queue', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'x-print-secret': POLL_SECRET },
-            body: JSON.stringify({ printedIds }),
+    async function longPollLoop() {
+      while (true) {
+        try {
+          const res = await fetch(pollUrl, {
+            method: 'GET',
+            headers: { 'x-print-secret': POLL_SECRET },
           });
+          if (!res.ok) {
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          const data = await res.json();
+          const jobs = data.jobs || [];
+
+          const printedIds = [];
+          for (const job of jobs) {
+            try {
+              if (job.type === 'kitchen') {
+                await printWithRetry(() => printKitchenOrder(job.payload));
+                printedIds.push(job.id);
+              } else if (job.type === 'correction') {
+                await printWithRetry(() => printCorrectionOrder(job.payload));
+                printedIds.push(job.id);
+              }
+            } catch (err) {
+              logError('Error imprimiendo trabajo ' + job.id, { error: err.message });
+            }
+          }
+
+          if (printedIds.length > 0) {
+            await fetch(POLL_BASE_URL + '/api/print-queue', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', 'x-print-secret': POLL_SECRET },
+              body: JSON.stringify({ printedIds }),
+            });
+          }
+        } catch (err) {
+          await new Promise(r => setTimeout(r, 2000));
         }
-      } catch (err) {
-        // Silenciar errores de red para no llenar logs
       }
-    }, POLL_INTERVAL_MS);
+    }
+    longPollLoop();
   } else {
-    logInfo('Polling a Vercel desactivado (configure VERCEL_APP_URL y PRINT_POLLING_SECRET para activar)');
+    logInfo('Long polling a Vercel desactivado (configure VERCEL_APP_URL y PRINT_POLLING_SECRET para activar)');
   }
 });
 

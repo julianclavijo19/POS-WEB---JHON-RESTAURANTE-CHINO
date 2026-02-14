@@ -279,6 +279,9 @@ export async function printTicket(content: string, title: string = 'Ticket', inc
             padding: 3mm;
             width: ${paperWidth};
             background: white;
+            color: #000;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           pre {
             margin: 0;
@@ -286,12 +289,16 @@ export async function printTicket(content: string, title: string = 'Ticket', inc
             word-wrap: break-word;
             font-family: inherit;
             font-size: inherit;
+            color: #000;
           }
           @media print {
             body {
               width: ${paperWidth};
               padding: 2mm;
+              background: white !important;
+              color: #000 !important;
             }
+            pre { color: #000 !important; }
             @page {
               size: ${paperWidth} auto;
               margin: 0;
@@ -452,6 +459,20 @@ export async function sendToPrintServer(endpoint: string, data: any): Promise<bo
     return result.success === true
   } catch (error) {
     console.error('❌ Error conectando con servidor de impresión:', error)
+    return false
+  }
+}
+
+/** Abrir caja monedera (conectada a la impresora por LAN). Llamar después de cobrar. */
+export async function openCashDrawer(): Promise<boolean> {
+  try {
+    const baseUrl = await getPrintServerUrl()
+    if (!baseUrl) return false
+    const response = await fetch(`${baseUrl}/open-drawer`, { method: 'POST' })
+    const result = await response.json()
+    return result.success === true
+  } catch (error) {
+    console.error('Error abriendo caja:', error)
     return false
   }
 }

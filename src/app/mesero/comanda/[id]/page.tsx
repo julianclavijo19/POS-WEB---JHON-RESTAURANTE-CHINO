@@ -134,7 +134,8 @@ export default function ComandaDetailPage() {
         if (item && order) {
           printCorrectionTicket({
             tipo: 'CANTIDAD',
-            mesa: order.table?.name || '?',
+            mesa: order.table?.name || 'Para llevar',
+            area: (order.table as any)?.area?.name || 'N/A',
             mesero: order.waiter?.name || '?',
             items: [{
               nombre: item.product.name,
@@ -164,7 +165,8 @@ export default function ComandaDetailPage() {
         if (item && order) {
           printCorrectionTicket({
             tipo: 'MODIFICACION',
-            mesa: order.table?.name || '?',
+            mesa: order.table?.name || 'Para llevar',
+            area: (order.table as any)?.area?.name || 'N/A',
             mesero: order.waiter?.name || '?',
             items: [{
               nombre: item.product.name,
@@ -195,7 +197,8 @@ export default function ComandaDetailPage() {
         if (item && order) {
           printCorrectionTicket({
             tipo: 'ELIMINAR',
-            mesa: order.table?.name || '?',
+            mesa: order.table?.name || 'Para llevar',
+            area: (order.table as any)?.area?.name || 'N/A',
             mesero: order.waiter?.name || '?',
             items: [{
               nombre: item.product.name,
@@ -231,7 +234,8 @@ export default function ComandaDetailPage() {
         if (item && order) {
           printCorrectionTicket({
             tipo: 'MODIFICACION',
-            mesa: order.table?.name || '?',
+            mesa: order.table?.name || 'Para llevar',
+            area: (order.table as any)?.area?.name || 'N/A',
             mesero: order.waiter?.name || '?',
             items: [{
               nombre: item.product.name,
@@ -271,7 +275,8 @@ export default function ComandaDetailPage() {
         if (order) {
           printCorrectionTicket({
             tipo: 'AGREGAR',
-            mesa: order.table?.name || '?',
+            mesa: order.table?.name || 'Para llevar',
+            area: (order.table as any)?.area?.name || 'N/A',
             mesero: order.waiter?.name || '?',
             items: [{
               nombre: product.name,
@@ -643,11 +648,19 @@ export default function ComandaDetailPage() {
               <Button variant="outline" className="w-full" onClick={() => window.print()}>
                 <Printer className="h-4 w-4 mr-2" />Imprimir
               </Button>
-              <Link href={`/mesero/comanda/nueva?table=${order.table.id}`}>
-                <Button variant="outline" className="w-full">
-                  <Send className="h-4 w-4 mr-2" />Nueva Comanda
-                </Button>
-              </Link>
+              {order.table ? (
+                <Link href={`/mesero/comanda/nueva?table=${order.table.id}`}>
+                  <Button variant="outline" className="w-full">
+                    <Send className="h-4 w-4 mr-2" />Nueva Comanda (mesa)
+                  </Button>
+                </Link>
+              ) : (
+                <Link href="/mesero/para-llevar">
+                  <Button variant="outline" className="w-full">
+                    <Send className="h-4 w-4 mr-2" />Nueva Comanda (para llevar)
+                  </Button>
+                </Link>
+              )}
             </div>
           </CardContent>
         </Card>

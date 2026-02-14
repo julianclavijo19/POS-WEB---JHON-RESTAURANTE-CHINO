@@ -102,16 +102,19 @@ export async function POST(
       // Create multiple payments
       const payments = []
       for (const sp of split_payments) {
+        const insertRow: Record<string, unknown> = {
+          order_id: orderId,
+          amount: sp.amount,
+          method: (sp.method || 'CASH').toString().toUpperCase(),
+          received_amount: sp.amount,
+          change_amount: 0,
+        }
+        if (cashRegisterId != null && cashRegisterId !== '') {
+          insertRow.cash_register_id = cashRegisterId
+        }
         const { data: payment, error: paymentError } = await supabase
           .from('payments')
-          .insert({
-            order_id: orderId,
-            amount: sp.amount,
-            method: sp.method.toUpperCase(),
-            cash_register_id: cashRegisterId,
-            received_amount: sp.amount,
-            change_amount: 0,
-          })
+          .insert(insertRow)
           .select()
           .single()
 
@@ -215,17 +218,20 @@ export async function POST(
     }
 
     // Crear el pago
+    const singlePaymentRow: Record<string, unknown> = {
+      order_id: orderId,
+      amount: finalAmount,
+      method: paymentMethod.toUpperCase(),
+      reference: reference || null,
+      received_amount: received_amount ?? finalAmount,
+      change_amount: change_amount ?? 0,
+    }
+    if (cashRegisterId != null && cashRegisterId !== '') {
+      singlePaymentRow.cash_register_id = cashRegisterId
+    }
     const { data: payment, error: paymentError } = await supabase
       .from('payments')
-      .insert({
-        order_id: orderId,
-        amount: finalAmount,
-        method: paymentMethod.toUpperCase(),
-        reference,
-        cash_register_id: cashRegisterId,
-        received_amount: received_amount || finalAmount,
-        change_amount: change_amount || 0,
-      })
+      .insert(singlePaymentRow)
       .select()
       .single()
 

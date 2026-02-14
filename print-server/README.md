@@ -299,7 +299,7 @@ Con la app en **Vercel**, la impresión se hace por **polling**: el print-server
    ```
    O con PM2: `pm2 restart print-server`. Debes ver en logs: `Polling a Vercel activado`.
 
-Cada segundo el servidor hace `GET .../api/print-queue`, imprime los trabajos pendientes y marca como impresos con `PATCH .../api/print-queue`.
+El servidor usa **long polling**: hace `GET .../api/print-queue?longPoll=1` y la API mantiene la conexión abierta hasta 8 s si no hay trabajos (o responde en cuanto llega uno). Así se reducen las invocaciones en Vercel (plan gratuito).
 
 Variables de entorno del print-server:
 

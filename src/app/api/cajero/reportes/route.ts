@@ -195,7 +195,8 @@ export async function GET(request: Request) {
     }
     
     orderList.forEach((order: any) => {
-      const hour = new Date(order.updated_at || order.created_at).getHours()
+      const d = new Date(order.updated_at || order.created_at)
+      const hour = parseInt(d.toLocaleString('en-US', { timeZone: 'America/Bogota', hour: 'numeric', hour12: false }), 10)
       const existing = hourlyMap.get(hour)!
       existing.orders += 1
       existing.total += Number(order.total) || 0

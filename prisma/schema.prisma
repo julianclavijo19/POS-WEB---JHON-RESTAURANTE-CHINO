@@ -1,0 +1,250 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly /d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==================== USUARIOS Y AUTENTICACIÓN ====================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String
+  role          Role      @default(WAITER)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orders        Order[]
+  cashRegisters CashRegister[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  CASHIER
+  WAITER
+  KITCHEN
+}
+
+// ==================== CATÁLOGO ====================
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  color       String    @default("#3b82f6")
+  icon        String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  products    Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal   @db.Decimal(10, 2)
+  cost        Decimal?  @db.Decimal(10, 2)
+  image       String?
+  isActive    Boolean   @default(true)
+  inStock     Boolean   @default(true)
+  prepTime    Int       @default(10) // minutos
+  categoryId  String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  category    Category    @relation(fields: [categoryId], references: [id])
+  orderItems  OrderItem[]
+
+  @@map("products")
+}
+
+// ==================== ÁREAS Y MESAS ====================
+
+model Area {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  tables      Table[]
+
+  @@map("areas")
+}
+
+model Table {
+  id          String      @id @default(cuid())
+  number      Int
+  name        String?
+  capacity    Int         @default(4)
+  status      TableStatus @default(AVAILABLE)
+  areaId      String
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  area        Area        @relation(fields: [areaId], references: [id])
+  orders      Order[]
+
+  @@unique([number, areaId])
+  @@map("tables")
+}
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  MAINTENANCE
+}
+
+// ==================== PEDIDOS ====================
+
+model Order {
+  id              String      @id @default(cuid())
+  orderNumber     String      @unique
+  status          OrderStatus @default(PENDING)
+  tableId         String?
+  customerId      String?
+  customerName    String?
+  orderType       OrderType   @default(DINE_IN)
+  subtotal        Decimal     @db.Decimal(10, 2) @default(0)
+  discount        Decimal     @db.Decimal(10, 2) @default(0)
+  discountType    String?     // "percentage" o "fixed"
+  tax             Decimal     @db.Decimal(10, 2) @default(0)
+  total           Decimal     @db.Decimal(10, 2) @default(0)
+  notes           String?
+  waiterId        String?
+  kitchenPrinted  Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  table           Table?      @relation(fields: [tableId], references: [id])
+  waiter          User?       @relation(fields: [waiterId], references: [id])
+  items           OrderItem[]
+  payments        Payment[]
+
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING       // Creada, no enviada a cocina
+  IN_KITCHEN    // En preparación
+  READY         // Lista para servir
+  SERVED        // Servida al cliente
+  PAID          // Pagada
+  CANCELLED     // Cancelada
+}
+
+enum OrderType {
+  DINE_IN       // Para comer aquí
+  TAKEOUT       // Para llevar
+  DELIVERY      // Domicilio
+}
+
+model OrderItem {
+  id          String          @id @default(cuid())
+  orderId     String
+  productId   String
+  quantity    Int             @default(1)
+  unitPrice   Decimal         @db.Decimal(10, 2)
+  subtotal    Decimal         @db.Decimal(10, 2)
+  notes       String?
+  status      OrderItemStatus @default(PENDING)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product         @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+enum OrderItemStatus {
+  PENDING
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
+}
+
+// ==================== PAGOS ====================
+
+model Payment {
+  id            String        @id @default(cuid())
+  orderId       String
+  amount        Decimal       @db.Decimal(10, 2)
+  method        PaymentMethod
+  reference     String?
+  receivedAmount Decimal?     @db.Decimal(10, 2)
+  changeAmount  Decimal?      @db.Decimal(10, 2)
+  createdAt     DateTime      @default(now())
+
+  order         Order         @relation(fields: [orderId], references: [id])
+
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  OTHER
+}
+
+// ==================== CAJA REGISTRADORA ====================
+
+model CashRegister {
+  id              String    @id @default(cuid())
+  userId          String
+  openingAmount   Decimal   @db.Decimal(10, 2)
+  closingAmount   Decimal?  @db.Decimal(10, 2)
+  expectedAmount  Decimal?  @db.Decimal(10, 2)
+  difference      Decimal?  @db.Decimal(10, 2)
+  cashSales       Decimal   @db.Decimal(10, 2) @default(0)
+  cardSales       Decimal   @db.Decimal(10, 2) @default(0)
+  transferSales   Decimal   @db.Decimal(10, 2) @default(0)
+  totalSales      Decimal   @db.Decimal(10, 2) @default(0)
+  totalOrders     Int       @default(0)
+  notes           String?
+  status          CashRegisterStatus @default(OPEN)
+  openedAt        DateTime  @default(now())
+  closedAt        DateTime?
+
+  user            User      @relation(fields: [userId], references: [id])
+
+  @@map("cash_registers")
+}
+
+enum CashRegisterStatus {
+  OPEN
+  CLOSED
+}
+
+// ==================== CONFIGURACIÓN ====================
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}

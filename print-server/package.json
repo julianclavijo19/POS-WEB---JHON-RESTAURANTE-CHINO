@@ -1,0 +1,25 @@
+{
+  "name": "print-server",
+  "version": "1.0.0",
+  "description": "Servidor de impresión para impresora térmica Jalltech C260",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test-print.js"
+  },
+  "keywords": [
+    "thermal-printer",
+    "escpos",
+    "print-server",
+    "kitchen-orders"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "node-thermal-printer": "^4.4.2",
+    "cors": "^2.8.5",
+    "iconv-lite": "^0.6.3"
+  }
+}

@@ -88,20 +88,34 @@ export async function POST(
     console.log('✓ Orden obtenida:', order?.id)
 
     // Encolar comanda para el print-server (polling)
-    const tableName = order?.table?.name || (order?.table as any)?.number != null ? `Mesa ${(order?.table as any)?.number}` : 'N/A'
+    const orderType = (order as any)?.type || 'DINE_IN'
+    const isParaLlevar = orderType === 'TAKEOUT' || orderType === 'TAKEAWAY'
+    const isDomicilio = orderType === 'DELIVERY'
+    let tableName = order?.table?.name || ((order?.table as any)?.number != null ? `Mesa ${(order?.table as any)?.number}` : null)
+    if (!tableName) {
+      if (isDomicilio) tableName = 'Domicilio'
+      else if (isParaLlevar) tableName = 'Para llevar'
+      else tableName = 'N/A'
+    }
     const areaName = (order?.table as any)?.area?.name || 'N/A'
     const waiterName = order?.waiter?.name || 'N/A'
     const kitchenPayload = {
       mesa: tableName,
       mesero: waiterName,
       area: areaName,
+      orderType,
+      type: orderType,
       items: (order?.items || []).map((item: any) => ({
         nombre: item?.product?.name || 'Producto',
         cantidad: item?.quantity || 1,
         notas: item?.notes || '',
       })),
       total: Number(order?.total) || 0,
-      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+      hora: new Date().toLocaleTimeString('es-CO', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Bogota',
+      }),
     }
     await supabase
       .from('print_queue')

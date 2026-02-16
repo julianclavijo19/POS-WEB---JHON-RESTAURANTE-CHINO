@@ -58,6 +58,20 @@ function logSuccess(message, data = null) {
 }
 
 // ==========================================
+// UTILIDADES
+// ==========================================
+const TIMEZONE_CO = 'America/Bogota';
+
+function formatHoraCorta(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  return d.toLocaleTimeString('es-CO', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: TIMEZONE_CO
+  });
+}
+
+// ==========================================
 // FUNCIONES DE IMPRESIÓN
 // ==========================================
 
@@ -148,19 +162,37 @@ async function printKitchenOrder(orderData) {
   // Texto pequeño para todo el ticket
   printer.setTextSize(0, 0);
   
+  const orderType = (orderData.orderType || orderData.type || '').toUpperCase();
+  const isParaLlevar = orderType === 'TAKEOUT' || orderType === 'TAKEAWAY';
+  const isDomicilio = orderType === 'DELIVERY';
+  const hora = orderData.hora || formatHoraCorta();
+
   // ========== ENCABEZADO ==========
   printer.alignCenter();
   printer.bold(true);
   printer.println('--- COMANDA ---');
+  if (isParaLlevar || isDomicilio) {
+    printer.newLine();
+    printer.setTextSize(2, 2);
+    printer.invert(true);
+    if (isParaLlevar) {
+      printer.println(' PEDIDO PARA LLEVAR ');
+    } else {
+      printer.println(' PEDIDO DOMICILIO ');
+    }
+    printer.invert(false);
+    printer.setTextSize(0, 0);
+    printer.newLine();
+  }
   printer.bold(false);
   printer.println('--------------------------------');
-  
+
   // ========== INFORMACIÓN ==========
   printer.alignLeft();
   printer.println(`Mesero: ${orderData.mesero || 'N/A'}`);
   printer.println(`Mesa: ${orderData.mesa || 'N/A'}`);
   printer.println(`Area: ${orderData.area || 'N/A'}`);
-  printer.println(`Hora: ${orderData.hora || new Date().toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'})}`);
+  printer.println(`Hora: ${hora}`);
   printer.println('--------------------------------');
   
   // ========== ITEMS ==========
@@ -209,7 +241,7 @@ async function printTestTicket() {
   printer.println('La impresora esta funcionando');
   printer.println('correctamente.');
   printer.newLine();
-  printer.println(`Fecha: ${new Date().toLocaleString('es-CO')}`);
+  printer.println(`Fecha: ${new Date().toLocaleString('es-CO', { timeZone: TIMEZONE_CO })}`);
   printer.println(`IP: ${CONFIG.printer.ip}:${CONFIG.printer.port}`);
   printer.newLine();
   printer.println('Caracteres especiales:');
@@ -273,7 +305,7 @@ async function printCorrectionOrder(orderData) {
   printer.println(`Mesero: ${orderData.mesero || 'N/A'}`);
   printer.println(`Mesa: ${orderData.mesa || 'N/A'}`);
   printer.println(`Area: ${orderData.area || 'N/A'}`);
-  printer.println(`Hora: ${orderData.hora || new Date().toLocaleTimeString('es-CO', {hour:'2-digit', minute:'2-digit'})}`);
+  printer.println(`Hora: ${orderData.hora || formatHoraCorta()}`);
   printer.println('--------------------------------');
   
   // ========== ITEMS MODIFICADOS/AGREGADOS ==========

@@ -289,18 +289,31 @@ export async function POST(request: Request) {
     }
     console.log('🪑 Mesa:', tableName, 'Área:', areaName, 'Mesero:', waiterName)
 
+    // Para pedidos sin mesa, identificar como Para llevar o Domicilio
+    const tipoOrden = orderType || 'DINE_IN'
+    let mesaComanda = tableName
+    if (!finalTableId) {
+      mesaComanda = tipoOrden === 'DELIVERY' ? 'Domicilio' : tipoOrden === 'TAKEOUT' || tipoOrden === 'TAKEAWAY' ? 'Para llevar' : 'N/A'
+    }
+
     // Encolar comanda para el servidor de impresión (polling)
     const kitchenPrintPayload = {
-      mesa: tableName,
+      mesa: mesaComanda,
       mesero: waiterName,
       area: areaName || 'N/A',
+      orderType: tipoOrden,
+      type: tipoOrden,
       items: orderItems.map((item: any) => ({
         nombre: products?.find((p: any) => p.id === item.product_id)?.name || 'Producto',
         cantidad: item.quantity,
         notas: item.notes || '',
       })),
       total: Number(total) || 0,
-      hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+      hora: new Date().toLocaleTimeString('es-CO', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Bogota',
+      }),
     }
     await supabase
       .from('print_queue')

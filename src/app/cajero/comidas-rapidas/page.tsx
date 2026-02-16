@@ -82,6 +82,13 @@ export default function ComidasRapidasPage() {
     return () => clearInterval(interval)
   }, [fetchShift])
 
+  // Listen for refresh event from keyboard shortcuts
+  useEffect(() => {
+    const handleRefresh = () => fetchShift()
+    window.addEventListener('cajero-refresh', handleRefresh)
+    return () => window.removeEventListener('cajero-refresh', handleRefresh)
+  }, [fetchShift])
+
   // Open shift
   const handleOpenShift = async () => {
     if (!user) {

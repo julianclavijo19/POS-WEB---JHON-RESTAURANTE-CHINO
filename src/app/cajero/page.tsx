@@ -513,6 +513,68 @@ export default function CajeroPage() {
     setSplitPayments(splitPayments.filter((_, i) => i !== index))
   }
 
+  // Keyboard shortcuts for payment modal & refresh
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isModalOpen = selectedTable !== null || selectedTakeawayOrder !== null
+      const target = e.target as HTMLElement
+      const isInputFocused = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+
+      // Payment modal shortcuts (only when modal is open and not in split mode)
+      if (isModalOpen && !splitPaymentMode && !isInputFocused) {
+        // 1 = Efectivo, 2 = Tarjeta, 3 = Transferencia
+        if (e.key === '1') {
+          e.preventDefault()
+          setPaymentMethod('CASH')
+          return
+        }
+        if (e.key === '2') {
+          e.preventDefault()
+          setPaymentMethod('CARD')
+          return
+        }
+        if (e.key === '3') {
+          e.preventDefault()
+          setPaymentMethod('TRANSFER')
+          return
+        }
+      }
+
+      // Enter = Confirmar cobro (when modal open, not in input unless cash received is filled)
+      if (isModalOpen && e.key === 'Enter' && !processing) {
+        // If in cash mode and focused on received amount input, allow the payment
+        if (paymentMethod === 'CASH' && isInputFocused && target.tagName === 'INPUT') {
+          const received = parseFloat(receivedAmount) || 0
+          const finalTotal = calculateFinalTotal()
+          if (received >= finalTotal) {
+            e.preventDefault()
+            handlePayment()
+          }
+          return
+        }
+        // If not in input and not cash (card/transfer don't need amount)
+        if (!isInputFocused && paymentMethod !== 'CASH') {
+          e.preventDefault()
+          handlePayment()
+          return
+        }
+      }
+    }
+
+    // Listen for custom refresh event from KeyboardShortcuts component
+    const handleRefresh = () => {
+      fetchTables()
+      fetchShift()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('cajero-refresh', handleRefresh)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('cajero-refresh', handleRefresh)
+    }
+  }, [selectedTable, selectedTakeawayOrder, splitPaymentMode, paymentMethod, receivedAmount, processing, fetchTables, fetchShift])
+
   // Filter tables
   const filteredAreas = areas.map(area => ({
     ...area,

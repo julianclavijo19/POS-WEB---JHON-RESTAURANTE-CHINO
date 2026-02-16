@@ -9,6 +9,7 @@ import {
   Search, LogOut, Menu, X, ChevronDown, TrendingUp, Utensils, Zap, ShoppingBag, ClipboardList
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import KeyboardShortcuts from '@/components/cajero/KeyboardShortcuts'
 
 interface User {
   id: string
@@ -21,38 +22,38 @@ const menuSections = [
   {
     title: 'Pedidos',
     items: [
-      { href: '/cajero/tomar-pedido', label: 'Tomar Pedido Mesa', icon: ClipboardList },
-      { href: '/cajero/para-llevar', label: 'Pedidos Para Llevar', icon: ShoppingBag },
+      { href: '/cajero/tomar-pedido', label: 'Tomar Pedido Mesa', icon: ClipboardList, shortcut: 'F4' },
+      { href: '/cajero/para-llevar', label: 'Pedidos Para Llevar', icon: ShoppingBag, shortcut: 'F6' },
     ]
   },
   {
     title: 'Cajas',
     items: [
-      { href: '/cajero', label: 'Caja - Restaurante Chino', icon: Utensils },
-      { href: '/cajero/comidas-rapidas', label: 'Caja - Comidas Rápidas', icon: Zap },
+      { href: '/cajero', label: 'Caja - Restaurante Chino', icon: Utensils, shortcut: 'F2' },
+      { href: '/cajero/comidas-rapidas', label: 'Caja - Comidas Rápidas', icon: Zap, shortcut: 'F3' },
     ]
   },
   {
     title: 'Operaciones',
     items: [
-      { href: '/cajero/reimpresiones', label: 'Reimpresiones', icon: Printer },
-      { href: '/cajero/devoluciones', label: 'Devoluciones', icon: RotateCcw },
-      { href: '/cajero/descuentos', label: 'Descuentos', icon: Percent },
+      { href: '/cajero/reimpresiones', label: 'Reimpresiones', icon: Printer, shortcut: 'F7' },
+      { href: '/cajero/devoluciones', label: 'Devoluciones', icon: RotateCcw, shortcut: 'F8' },
+      { href: '/cajero/descuentos', label: 'Descuentos', icon: Percent, shortcut: 'F9' },
     ]
   },
   {
     title: 'Historial',
     items: [
-      { href: '/cajero/historial', label: 'Transacciones Diarias', icon: Receipt },
-      { href: '/cajero/historial-caja', label: 'Cierres de Caja', icon: Wallet },
+      { href: '/cajero/historial', label: 'Transacciones Diarias', icon: Receipt, shortcut: 'Alt+H' },
+      { href: '/cajero/historial-caja', label: 'Cierres de Caja', icon: Wallet, shortcut: 'Alt+C' },
     ]
   },
   {
     title: 'Consultas',
     items: [
-      { href: '/cajero/estadisticas', label: 'Estadísticas', icon: TrendingUp },
-      { href: '/cajero/reportes', label: 'Reportes', icon: BarChart3 },
-      { href: '/cajero/precios', label: 'Consulta Precios', icon: Search },
+      { href: '/cajero/estadisticas', label: 'Estadísticas', icon: TrendingUp, shortcut: 'Alt+E' },
+      { href: '/cajero/reportes', label: 'Reportes', icon: BarChart3, shortcut: 'Alt+R' },
+      { href: '/cajero/precios', label: 'Consulta Precios', icon: Search, shortcut: 'Alt+P' },
     ]
   },
 ]
@@ -144,13 +145,24 @@ export default function CajeroLayout({ children }: { children: React.ReactNode }
                         key={item.href}
                         href={item.href}
                         onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${isActive
+                        className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${isActive
                             ? 'bg-gray-900 text-white'
                             : 'text-gray-700 hover:bg-gray-100'
                           }`}
                       >
-                        <item.icon className="h-4 w-4" />
-                        {item.label}
+                        <div className="flex items-center gap-3">
+                          <item.icon className="h-4 w-4" />
+                          {item.label}
+                        </div>
+                        {item.shortcut && (
+                          <kbd className={`hidden lg:inline-flex text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                            isActive
+                              ? 'bg-gray-700 text-gray-300'
+                              : 'bg-gray-100 text-gray-400 border border-gray-200'
+                          }`}>
+                            {item.shortcut}
+                          </kbd>
+                        )}
                       </Link>
                     )
                   })}
@@ -210,6 +222,9 @@ export default function CajeroLayout({ children }: { children: React.ReactNode }
           {children}
         </main>
       </div>
+
+      {/* Keyboard shortcuts handler */}
+      <KeyboardShortcuts />
     </div>
   )
 }

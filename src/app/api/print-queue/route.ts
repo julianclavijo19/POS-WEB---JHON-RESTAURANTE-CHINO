@@ -95,18 +95,28 @@ export async function PATCH(request: NextRequest) {
 
 /**
  * POST - Encolar un trabajo de impresión.
- * Body: { type: 'kitchen' | 'correction', payload: object }
- * Lo llaman: POST /api/orders (al crear orden) y el cliente al enviar correcciones.
+ * Body: { type: 'kitchen' | 'correction' | 'cash_drawer', payload?: object }
+ * Para cash_drawer el payload puede ser {} (vacío).
+ * Lo llaman: POST /api/orders (al crear orden), el cliente al enviar correcciones y al confirmar pago.
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const type = body?.type
-    const payload = body?.payload
+    let payload = body?.payload
 
-    if (!type || !payload || !['kitchen', 'correction'].includes(type)) {
+    if (!type || !['kitchen', 'correction', 'cash_drawer'].includes(type)) {
       return NextResponse.json(
-        { error: 'Se requiere type (kitchen|correction) y payload' },
+        { error: 'Se requiere type (kitchen|correction|cash_drawer) y payload (salvo cash_drawer)' },
+        { status: 400 }
+      )
+    }
+
+    if (type === 'cash_drawer') {
+      payload = payload ?? {}
+    } else if (!payload) {
+      return NextResponse.json(
+        { error: 'Se requiere payload para kitchen y correction' },
         { status: 400 }
       )
     }

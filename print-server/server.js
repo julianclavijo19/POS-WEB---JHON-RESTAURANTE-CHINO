@@ -10,6 +10,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const net = require('net');
 const ThermalPrinter = require('node-thermal-printer').printer;
 const PrinterTypes = require('node-thermal-printer').types;
 
@@ -82,6 +83,26 @@ function createPrinter() {
  */
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Envía comando ESC/POS para abrir caja monedera por TCP (RJ11 a impresora).
+ */
+function openCashDrawerTcp() {
+  return new Promise((resolve, reject) => {
+    const buf = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]);
+    const socket = net.connect(CONFIG.printer.port, CONFIG.printer.ip, () => {
+      socket.write(buf, () => {
+        socket.end();
+        resolve();
+      });
+    });
+    socket.on('error', reject);
+    socket.setTimeout(CONFIG.printer.timeout, () => {
+      socket.destroy();
+      reject(new Error('Timeout abriendo caja'));
+    });
+  });
 }
 
 /**
@@ -625,6 +646,9 @@ app.listen(CONFIG.server.port, CONFIG.server.host, () => {
                 printedIds.push(job.id);
               } else if (job.type === 'correction') {
                 await printWithRetry(() => printCorrectionOrder(job.payload));
+                printedIds.push(job.id);
+              } else if (job.type === 'cash_drawer') {
+                await printWithRetry(() => openCashDrawerTcp());
                 printedIds.push(job.id);
               }
             } catch (err) {

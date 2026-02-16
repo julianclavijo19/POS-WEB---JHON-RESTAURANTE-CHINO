@@ -166,6 +166,9 @@ export async function POST(
         console.error('Error updating order:', updateOrderError)
       }
 
+      // Encolar apertura de caja monedera (print-server lo procesa por polling)
+      await supabase.from('print_queue').insert({ type: 'cash_drawer', payload: {} })
+
       // Release table if applicable
       if (order.table_id) {
         const { count } = await supabase
@@ -280,6 +283,9 @@ export async function POST(
     if (updateOrderError) {
       console.error('Error updating order:', updateOrderError)
     }
+
+    // Encolar apertura de caja monedera (print-server lo procesa por polling)
+    await supabase.from('print_queue').insert({ type: 'cash_drawer', payload: {} })
 
     // Liberar la mesa
     if (order.table_id) {

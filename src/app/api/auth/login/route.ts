@@ -3,14 +3,27 @@ import { supabase } from '@/lib/supabase'
 import { cookies } from 'next/headers'
 import bcrypt from 'bcryptjs'
 
+function getEnvDebug() {
+  return {
+    hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+    hasSupabaseServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    hasSupabaseAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    supabaseUrlLength: (process.env.NEXT_PUBLIC_SUPABASE_URL || '').length,
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { email, password } = body
 
+    const envDebug = getEnvDebug()
+    console.log('[LOGIN] Env:', JSON.stringify(envDebug))
+    console.log('[LOGIN] Email intent:', email || '(vacío)')
+
     if (!email || !password) {
       return NextResponse.json(
-        { error: 'Email y contraseña son requeridos' },
+        { error: 'Email y contraseña son requeridos', debug: envDebug },
         { status: 400 }
       )
     }
@@ -24,8 +37,12 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error || !user) {
+      console.log('[LOGIN] Supabase error:', error?.message, '| user:', !!user)
       return NextResponse.json(
-        { error: 'Credenciales incorrectas' },
+        {
+          error: 'Credenciales incorrectas',
+          debug: { ...envDebug, supabaseError: error?.message || null },
+        },
         { status: 401 }
       )
     }
@@ -58,8 +75,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isPasswordValid) {
+      console.log('[LOGIN] Password inválido para:', email)
       return NextResponse.json(
-        { error: 'Credenciales incorrectas' },
+        { error: 'Credenciales incorrectas', debug: { ...envDebug, reason: 'password_invalid' } },
         { status: 401 }
       )
     }
@@ -90,9 +108,12 @@ export async function POST(request: NextRequest) {
       message: 'Login exitoso',
     })
   } catch (error: any) {
-    console.error('Login error:', error)
+    console.error('[LOGIN] Error:', error?.message || error)
     return NextResponse.json(
-      { error: 'Error en el servidor' },
+      {
+        error: 'Error en el servidor',
+        debug: { ...getEnvDebug(), serverError: error?.message || String(error) },
+      },
       { status: 500 }
     )
   }

@@ -56,30 +56,28 @@ export async function GET(request: Request) {
     const startDateISO = startDate.toISOString()
     const endDateISO = endDate.toISOString()
 
-    // Obtener TODOS los pagos
-    const { data: allPayments, error: paymentsError } = await supabase
+    // Obtener pagos del periodo (filtro por fecha en query para evitar límite 1000)
+    const { data: payments, error: paymentsError } = await supabase
       .from('payments')
       .select('id, amount, method, created_at, order_id')
+      .gte('created_at', startDateISO)
+      .lte('created_at', endDateISO)
       .order('created_at', { ascending: false })
 
     if (paymentsError) {
       console.error('Payments Error:', paymentsError)
     }
 
-    // Filtrar pagos por fecha
-    const payments = allPayments?.filter(p => {
-      const pDate = new Date(p.created_at)
-      return pDate >= startDate && pDate <= endDate
-    }) || []
+    const paymentsList = payments || []
 
-    // Calcular ventas desde pagos
-    const totalSalesFromPayments = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
-    const cashSales = payments.filter(p => p.method === 'CASH').reduce((sum, p) => sum + Number(p.amount || 0), 0)
-    const cardSales = payments.filter(p => p.method === 'CARD').reduce((sum, p) => sum + Number(p.amount || 0), 0)
-    const transferSales = payments.filter(p => p.method === 'TRANSFER').reduce((sum, p) => sum + Number(p.amount || 0), 0)
-    const totalPaidOrders = payments.length
+    // Calcular ventas desde pagos (incluye refunds negativos)
+    const totalSalesFromPayments = paymentsList.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+    const cashSales = paymentsList.filter(p => p.method === 'CASH').reduce((sum, p) => sum + Number(p.amount || 0), 0)
+    const cardSales = paymentsList.filter(p => p.method === 'CARD').reduce((sum, p) => sum + Number(p.amount || 0), 0)
+    const transferSales = paymentsList.filter(p => p.method === 'TRANSFER').reduce((sum, p) => sum + Number(p.amount || 0), 0)
+    const totalPaidOrders = paymentsList.filter(p => Number(p.amount || 0) > 0).length
 
-    // Obtener TODAS las órdenes del periodo para estadísticas
+    // Obtener órdenes del periodo
     const { data: allOrdersRaw } = await supabase
       .from('orders')
       .select('id, status, total, paid_at, created_at')
@@ -93,11 +91,10 @@ export async function GET(request: Request) {
     const totalSales = totalSalesFromPayments
     const totalOrders = allOrders.length
 
-    // Ventas diarias
+    // Ventas diarias (usar pagos del periodo ya filtrados)
     const dailySales: { date: string; total: number }[] = []
     const daysToShow = period === 'month' ? 30 : period === 'week' ? 7 : 1
     
-    // Obtener fecha actual en Colombia
     const nowUTC = new Date()
     const colombiaTime = new Date(nowUTC.getTime() - (COLOMBIA_OFFSET_HOURS * 60 * 60 * 1000))
     const todayYear = colombiaTime.getUTCFullYear()
@@ -105,21 +102,18 @@ export async function GET(request: Request) {
     const todayDay = colombiaTime.getUTCDate()
     
     for (let i = daysToShow - 1; i >= 0; i--) {
-      // Calcular la fecha del día i días atrás
       const targetDate = new Date(Date.UTC(todayYear, todayMonth, todayDay - i))
       const targetYear = targetDate.getUTCFullYear()
       const targetMonth = targetDate.getUTCMonth()
       const targetDay = targetDate.getUTCDate()
       
-      // Rango del día en UTC
       const dayStartUTC = new Date(Date.UTC(targetYear, targetMonth, targetDay, COLOMBIA_OFFSET_HOURS, 0, 0, 0))
       const dayEndUTC = new Date(Date.UTC(targetYear, targetMonth, targetDay + 1, COLOMBIA_OFFSET_HOURS - 1, 59, 59, 999))
       
-      // Filtrar pagos de ese día
-      const dayPayments = allPayments?.filter(p => {
+      const dayPayments = paymentsList.filter(p => {
         const pDate = new Date(p.created_at)
         return pDate >= dayStartUTC && pDate <= dayEndUTC
-      }) || []
+      })
       
       const dayTotal = dayPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
       
@@ -132,7 +126,7 @@ export async function GET(request: Request) {
     }
 
     // Productos más vendidos
-    const orderIdsWithPayments = [...new Set(payments.map(p => p.order_id).filter(Boolean))]
+    const orderIdsWithPayments = [...new Set(paymentsList.map(p => p.order_id).filter(Boolean))]
     
     const { data: orderItems } = await supabase
       .from('order_items')

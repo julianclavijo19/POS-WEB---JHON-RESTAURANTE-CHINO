@@ -34,7 +34,7 @@ export async function GET() {
       throw error
     }
 
-    // Si hay turno abierto, obtener transacciones del turno
+    // Si hay turno abierto, obtener transacciones del turno (incluye devoluciones con amount negativo)
     if (currentShift) {
       const { data: transactions } = await supabase
         .from('payments')
@@ -45,6 +45,7 @@ export async function GET() {
           received_amount,
           change_amount,
           created_at,
+          status,
           order:orders(
             id,
             order_number,
@@ -54,10 +55,10 @@ export async function GET() {
         .gte('created_at', currentShift.opened_at)
         .order('created_at', { ascending: false })
 
-      // Calcular totales por método
-      const cashTotal = transactions?.filter(t => t.method === 'CASH').reduce((s, t) => s + Number(t.amount), 0) || 0
-      const cardTotal = transactions?.filter(t => t.method === 'CARD').reduce((s, t) => s + Number(t.amount), 0) || 0
-      const transferTotal = transactions?.filter(t => t.method === 'TRANSFER').reduce((s, t) => s + Number(t.amount), 0) || 0
+      // Calcular totales por método (incluye devoluciones = amount negativo)
+      const cashTotal = transactions?.filter(t => t.method === 'CASH').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
+      const cardTotal = transactions?.filter(t => t.method === 'CARD').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
+      const transferTotal = transactions?.filter(t => t.method === 'TRANSFER').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
 
       return NextResponse.json({
         shift: {
@@ -219,15 +220,15 @@ export async function PUT(request: Request) {
       )
     }
 
-    // Calcular ventas del turno
+    // Calcular ventas del turno (incluye devoluciones = amount negativo)
     const { data: transactions } = await supabase
       .from('payments')
       .select('amount, method')
       .gte('created_at', shift.opened_at)
 
-    const cashSales = transactions?.filter(t => t.method === 'CASH').reduce((s, t) => s + Number(t.amount), 0) || 0
-    const cardSales = transactions?.filter(t => t.method === 'CARD').reduce((s, t) => s + Number(t.amount), 0) || 0
-    const transferSales = transactions?.filter(t => t.method === 'TRANSFER').reduce((s, t) => s + Number(t.amount), 0) || 0
+    const cashSales = transactions?.filter(t => t.method === 'CASH').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
+    const cardSales = transactions?.filter(t => t.method === 'CARD').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
+    const transferSales = transactions?.filter(t => t.method === 'TRANSFER').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
     const totalSales = cashSales + cardSales + transferSales
 
     // Calcular monto esperado (apertura + ventas en efectivo)

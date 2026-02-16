@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
-import { printInvoice, getAutoPrintSettings, openCashDrawer, type OrderData } from '@/lib/printer'
+import { printInvoice, getAutoPrintSettings, type OrderData } from '@/lib/printer'
 
 interface OrderItem {
   id: string
@@ -214,7 +214,7 @@ function CobrarContent() {
       })
 
       if (res.ok) {
-        openCashDrawer().catch(() => {})
+        // openCashDrawer se ejecuta desde el API (print_queue) → cash-drawer-script
         const printSettings = getAutoPrintSettings()
         if (printSettings.invoice) {
           await handlePrintInvoice()

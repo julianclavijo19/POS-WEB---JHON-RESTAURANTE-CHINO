@@ -12,7 +12,7 @@ import {
   ShoppingBag, Truck, Edit2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { printInvoice, openCashDrawer, type OrderData } from '@/lib/printer'
+import { printInvoice, type OrderData } from '@/lib/printer'
 
 // Interfaces
 interface OrderItem {
@@ -378,7 +378,7 @@ export default function CajeroPage() {
         })
 
         if (res.ok) {
-          openCashDrawer().catch(() => {})
+          // openCashDrawer se ejecuta desde el API (print_queue) → cash-drawer-script
           toast.success('Pago dividido procesado exitosamente')
           closePaymentModal()
           fetchTables()
@@ -423,7 +423,7 @@ export default function CajeroPage() {
           ? ` Cambio: ${formatCurrency(calculateChange())}` 
           : ''
         
-        openCashDrawer().catch(() => {})
+        // openCashDrawer se ejecuta desde el API (print_queue) → cash-drawer-script
         toast.success(`Pago procesado exitosamente.${changeMsg}`)
         closePaymentModal()
         fetchTables()

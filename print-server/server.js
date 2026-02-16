@@ -680,8 +680,9 @@ app.listen(CONFIG.server.port, CONFIG.server.host, () => {
                 await printWithRetry(() => printCorrectionOrder(job.payload));
                 printedIds.push(job.id);
               } else if (job.type === 'cash_drawer') {
-                await printWithRetry(() => openCashDrawerTcp());
-                printedIds.push(job.id);
+                // cash_drawer es manejado exclusivamente por cash-drawer-script
+                // (puerto COM/serial directo). No procesar aquí para evitar conflictos.
+                // printedIds.push(job.id); // No marcar - dejar para cash-drawer-script
               }
             } catch (err) {
               logError('Error imprimiendo trabajo ' + job.id, { error: err.message });

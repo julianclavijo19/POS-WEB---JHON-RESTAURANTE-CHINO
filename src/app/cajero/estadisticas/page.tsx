@@ -167,7 +167,11 @@ function KPICard({
 
 export default function EstadisticasPage() {
 	const [period, setPeriod] = useState<Period>('day')
-	const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+	// Use local date (not UTC) to avoid showing tomorrow's date after 7PM Colombia
+	const [selectedDate, setSelectedDate] = useState(() => {
+		const now = new Date()
+		return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+	})
 	const [sales, setSales] = useState<SalesPoint[]>([])
 	const [summary, setSummary] = useState<SalesSummary>({ total: 0, count: 0, avgTicket: 0, maxSale: 0, minSale: 0 })
 	const [loading, setLoading] = useState(true)

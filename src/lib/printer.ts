@@ -273,8 +273,9 @@ export async function printTicket(content: string, title: string = 'Ticket', inc
           }
           body {
             font-family: 'Courier New', 'Lucida Console', monospace;
-            font-size: 12px;
-            line-height: 1.3;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.4;
             margin: 0;
             padding: 3mm;
             width: ${paperWidth};
@@ -282,6 +283,8 @@ export async function printTicket(content: string, title: string = 'Ticket', inc
             color: #000;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+            -webkit-text-stroke: 0.3px #000;
+            letter-spacing: 0.3px;
           }
           pre {
             margin: 0;
@@ -289,7 +292,9 @@ export async function printTicket(content: string, title: string = 'Ticket', inc
             word-wrap: break-word;
             font-family: inherit;
             font-size: inherit;
+            font-weight: 700;
             color: #000;
+            -webkit-text-stroke: 0.3px #000;
           }
           @media print {
             body {
@@ -297,8 +302,14 @@ export async function printTicket(content: string, title: string = 'Ticket', inc
               padding: 2mm;
               background: white !important;
               color: #000 !important;
+              font-weight: 700 !important;
+              -webkit-text-stroke: 0.3px #000 !important;
             }
-            pre { color: #000 !important; }
+            pre { 
+              color: #000 !important; 
+              font-weight: 700 !important;
+              -webkit-text-stroke: 0.3px #000 !important;
+            }
             @page {
               size: ${paperWidth} auto;
               margin: 0;

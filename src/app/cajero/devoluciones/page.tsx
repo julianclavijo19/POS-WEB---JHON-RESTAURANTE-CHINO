@@ -48,7 +48,11 @@ export default function DevolucionesPage() {
   const [refunds, setRefunds] = useState<Refund[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
+  // Use local date (not UTC) to avoid wrong date after 7PM Colombia
+  const [dateFilter, setDateFilter] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  })
   const [activeTab, setActiveTab] = useState<'new' | 'history'>('new')
   const [hasActiveShift, setHasActiveShift] = useState<boolean | null>(null)
 

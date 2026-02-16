@@ -128,6 +128,10 @@ export async function GET(request: Request) {
       (orders || []).find(o => o.id === order.id)?.paid_at !== null
     )
 
+    // Get IDs of orders that already have an approved refund
+    // so we can exclude them from the "new refund" list
+    const refundedOrderIds = new Set<string>()
+
     // Get refunds for the day (table may not exist)
     let refunds: any[] = []
     try {
@@ -151,11 +155,20 @@ export async function GET(request: Request) {
       
       if (!refundsError) {
         refunds = refundsData || []
+        // Track which orders already have approved refunds
+        refunds.forEach(r => {
+          if (r.status === 'APPROVED' && r.order_id) {
+            refundedOrderIds.add(r.order_id)
+          }
+        })
       }
     } catch (e) {
       // Table may not exist, ignore
       console.log('refunds table may not exist')
     }
+
+    // Filter out orders that already have an approved refund
+    const availableOrders = formattedOrders.filter(o => !refundedOrderIds.has(o.id))
 
     // Get all user IDs from refunds
     const refundUserIds = [...new Set([
@@ -189,7 +202,7 @@ export async function GET(request: Request) {
     })
 
     return NextResponse.json({
-      orders: formattedOrders,
+      orders: availableOrders,
       refunds: formattedRefunds
     })
 
@@ -280,21 +293,44 @@ export async function POST(request: Request) {
     // Register the refund as a negative payment to reflect in cash register
     // This ensures the refund amount is deducted from the shift totals
     const refundMethod = payment_method || 'CASH'
-    const { error: paymentError } = await supabase
-      .from('payments')
-      .insert({
-        order_id,
-        method: refundMethod,
-        amount: -Math.abs(amount), // Negative amount for refund
-        received_amount: 0,
-        change_amount: 0,
-        status: 'REFUND',
-        cash_register_id: activeShift.id // Associate with shift
-      })
+    
+    // Build payment row - only include columns that exist
+    const refundPaymentRow: Record<string, unknown> = {
+      order_id,
+      method: refundMethod,
+      amount: -Math.abs(amount), // Negative amount for refund
+      received_amount: 0,
+      change_amount: 0,
+    }
 
-    if (paymentError) {
-      console.error('Error registering refund payment:', paymentError)
-      // Don't fail the operation, refund was already created
+    // Try inserting with optional columns first, fallback without them
+    let paymentInserted = false
+    try {
+      const { error: paymentError } = await supabase
+        .from('payments')
+        .insert({
+          ...refundPaymentRow,
+          status: 'REFUND',
+          cash_register_id: activeShift.id
+        })
+      if (paymentError) throw paymentError
+      paymentInserted = true
+    } catch (e1: any) {
+      console.warn('Refund payment with extra columns failed, trying without:', e1?.message)
+      // Retry without status and cash_register_id (columns might not exist)
+      try {
+        const { error: paymentError2 } = await supabase
+          .from('payments')
+          .insert(refundPaymentRow)
+        if (paymentError2) throw paymentError2
+        paymentInserted = true
+      } catch (e2: any) {
+        console.error('Error registering refund payment (fallback):', e2?.message)
+      }
+    }
+
+    if (!paymentInserted) {
+      console.error('WARNING: Refund payment could not be created. Cash register totals may not reflect this refund.')
     }
 
     return NextResponse.json({ 

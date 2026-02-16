@@ -66,10 +66,15 @@ BEGIN
     EXECUTE 'DELETE FROM stock_movements';
   END IF;
 
-  -- 11. RESETEAR ESTADO DE TODAS LAS MESAS A DISPONIBLE
-  -- NOTA: Si necesitas resetear el estado de las mesas, hazlo desde el panel de administración
-  -- o ejecuta manualmente: UPDATE tables SET status = 'VALOR_CORRECTO_DEL_ENUM';
-  NULL; -- Placeholder para mantener el bloque válido
+  -- 11. ELIMINAR COLA DE IMPRESIÓN PENDIENTE
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'print_queue' AND table_schema = 'public') THEN
+    EXECUTE 'DELETE FROM print_queue';
+  END IF;
+
+  -- 12. RESETEAR MESAS A DISPONIBLE
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'tables' AND table_schema = 'public') THEN
+    EXECUTE 'UPDATE tables SET status = ''FREE''';
+  END IF;
 
 END $$;
 

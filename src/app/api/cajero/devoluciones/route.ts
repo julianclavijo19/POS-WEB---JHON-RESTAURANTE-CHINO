@@ -10,12 +10,13 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const date = searchParams.get('date')
     
-    const targetDate = date ? new Date(date) : new Date()
-    const startOfDay = new Date(targetDate)
-    startOfDay.setHours(0, 0, 0, 0)
-    
-    const endOfDay = new Date(targetDate)
-    endOfDay.setHours(23, 59, 59, 999)
+    // Use Colombia timezone (UTC-5) for date range calculation
+    // When date param is '2026-02-16', we want Colombia's full day:
+    //   Start: 2026-02-16 00:00 COT = 2026-02-16 05:00 UTC
+    //   End:   2026-02-16 23:59 COT = 2026-02-17 04:59 UTC
+    const dateStr = date || new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const startOfDay = new Date(`${dateStr}T00:00:00-05:00`)
+    const endOfDay = new Date(`${dateStr}T23:59:59.999-05:00`)
 
     // Get paid/completed orders eligible for returns
     // También incluir órdenes que tengan registros de pago en la tabla payments

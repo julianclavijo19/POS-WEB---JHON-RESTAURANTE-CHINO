@@ -140,11 +140,6 @@ export default function CajeroPage() {
   const [receivedAmount, setReceivedAmount] = useState('')
   const [processing, setProcessing] = useState(false)
   
-  // Split payment state
-  const [splitPaymentMode, setSplitPaymentMode] = useState(false)
-  const [splitPayments, setSplitPayments] = useState<Array<{method: 'CASH' | 'CARD' | 'TRANSFER'; amount: number}>>([])
-  const [splitAmount, setSplitAmount] = useState('')
-  
   // Discount state
   const [showDiscountOptions, setShowDiscountOptions] = useState(false)
   const [discountAmount, setDiscountAmount] = useState(0)
@@ -357,45 +352,6 @@ export default function CajeroPage() {
     const finalTotal = calculateFinalTotal()
     const discountValue = calculateDiscount()
     
-    // Split payment mode
-    if (splitPaymentMode) {
-      const totalPaid = splitPayments.reduce((sum, p) => sum + p.amount, 0)
-      if (totalPaid < finalTotal) {
-        toast.error(`Faltan ${formatCurrency(finalTotal - totalPaid)} por pagar`)
-        return
-      }
-
-      setProcessing(true)
-      try {
-        const res = await fetch(`/api/orders/${order.id}/pay`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            split_payments: splitPayments,
-            tip: 0,
-            discount: discountValue
-          })
-        })
-
-        if (res.ok) {
-          // openCashDrawer se ejecuta desde el API (print_queue) → cash-drawer-script
-          toast.success('Pago dividido procesado exitosamente')
-          closePaymentModal()
-          fetchTables()
-          fetchShift()
-          handlePrintInvoice().catch(console.error)
-        } else {
-          const error = await res.json()
-          toast.error(error.error || 'Error al procesar pago')
-        }
-      } catch (error) {
-        toast.error('Error al procesar pago')
-      } finally {
-        setProcessing(false)
-      }
-      return
-    }
-    
     // Normal payment mode
     const received = parseFloat(receivedAmount) || 0
     
@@ -481,99 +437,36 @@ export default function CajeroPage() {
     setDiscountAmount(0)
     setDiscountType('percent')
     setShowDiscountOptions(false)
-    setSplitPaymentMode(false)
-    setSplitPayments([])
-    setSplitAmount('')
   }
 
-  // Calculate split payment remaining
-  const calculateSplitRemaining = () => {
-    const finalTotal = calculateFinalTotal()
-    const paidSoFar = splitPayments.reduce((sum, p) => sum + p.amount, 0)
-    return Math.max(0, finalTotal - paidSoFar)
-  }
-
-  // Add split payment
-  const addSplitPayment = () => {
-    const amount = parseFloat(splitAmount) || 0
-    if (amount <= 0) {
-      toast.error('Ingresa un monto válido')
-      return
-    }
-    if (amount > calculateSplitRemaining()) {
-      toast.error('El monto excede el total restante')
-      return
-    }
-    setSplitPayments([...splitPayments, { method: paymentMethod, amount }])
-    setSplitAmount('')
-  }
-
-  // Remove split payment
-  const removeSplitPayment = (index: number) => {
-    setSplitPayments(splitPayments.filter((_, i) => i !== index))
-  }
-
-  // Keyboard shortcuts for payment modal & refresh
+  // Enter to confirm payment when modal is open
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isModalOpen = selectedTable !== null || selectedTakeawayOrder !== null
+      if (!isModalOpen || e.key !== 'Enter' || processing) return
+
       const target = e.target as HTMLElement
-      const isInputFocused = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
 
-      // Payment modal shortcuts (only when modal is open and not in split mode)
-      if (isModalOpen && !splitPaymentMode && !isInputFocused) {
-        // 1 = Efectivo, 2 = Tarjeta, 3 = Transferencia
-        if (e.key === '1') {
-          e.preventDefault()
-          setPaymentMethod('CASH')
-          return
-        }
-        if (e.key === '2') {
-          e.preventDefault()
-          setPaymentMethod('CARD')
-          return
-        }
-        if (e.key === '3') {
-          e.preventDefault()
-          setPaymentMethod('TRANSFER')
-          return
-        }
-      }
-
-      // Enter = Confirmar cobro (when modal open, not in input unless cash received is filled)
-      if (isModalOpen && e.key === 'Enter' && !processing) {
-        // If in cash mode and focused on received amount input, allow the payment
-        if (paymentMethod === 'CASH' && isInputFocused && target.tagName === 'INPUT') {
-          const received = parseFloat(receivedAmount) || 0
-          const finalTotal = calculateFinalTotal()
-          if (received >= finalTotal) {
-            e.preventDefault()
-            handlePayment()
-          }
-          return
-        }
-        // If not in input and not cash (card/transfer don't need amount)
-        if (!isInputFocused && paymentMethod !== 'CASH') {
+      // Cash mode: only trigger when amount input is focused and sufficient
+      if (paymentMethod === 'CASH' && target.tagName === 'INPUT') {
+        const received = parseFloat(receivedAmount) || 0
+        if (received >= calculateFinalTotal()) {
           e.preventDefault()
           handlePayment()
-          return
         }
+        return
       }
-    }
 
-    // Listen for custom refresh event from KeyboardShortcuts component
-    const handleRefresh = () => {
-      fetchTables()
-      fetchShift()
+      // Card/Transfer: trigger from anywhere except inputs
+      if (paymentMethod !== 'CASH' && target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+        e.preventDefault()
+        handlePayment()
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('cajero-refresh', handleRefresh)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('cajero-refresh', handleRefresh)
-    }
-  }, [selectedTable, selectedTakeawayOrder, splitPaymentMode, paymentMethod, receivedAmount, processing, fetchTables, fetchShift])
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedTable, selectedTakeawayOrder, paymentMethod, receivedAmount, processing])
 
   // Filter tables
   const filteredAreas = areas.map(area => ({
@@ -1077,155 +970,33 @@ export default function CajeroPage() {
                 )}
               </div>
 
-              {/* Split payment toggle */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Dividir cuenta</p>
-                  <p className="text-xs text-gray-500">Pagar con múltiples métodos</p>
+              {/* Payment method */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-700">Método de pago</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: 'CASH', label: 'Efectivo', icon: Banknote },
+                    { value: 'CARD', label: 'Tarjeta', icon: CreditCard },
+                    { value: 'TRANSFER', label: 'Transferencia', icon: DollarSign },
+                  ] as const).map((method) => (
+                    <button
+                      key={method.value}
+                      onClick={() => setPaymentMethod(method.value)}
+                      className={`p-3 rounded-lg border text-center transition-all ${
+                        paymentMethod === method.value
+                          ? 'border-gray-900 bg-gray-900 text-white'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <method.icon className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">{method.label}</span>
+                    </button>
+                  ))}
                 </div>
-                <button
-                  onClick={() => {
-                    setSplitPaymentMode(!splitPaymentMode)
-                    if (splitPaymentMode) {
-                      setSplitPayments([])
-                      setSplitAmount('')
-                    }
-                  }}
-                  className={`w-12 h-6 rounded-full transition-colors ${
-                    splitPaymentMode ? 'bg-gray-900' : 'bg-gray-300'
-                  }`}
-                >
-                  <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
-                    splitPaymentMode ? 'translate-x-6' : 'translate-x-0.5'
-                  }`} />
-                </button>
               </div>
 
-              {/* Split payment mode */}
-              {splitPaymentMode ? (
-                <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-blue-800">Pagos divididos</p>
-                    <p className="text-sm text-blue-600">
-                      Restante: <span className="font-bold">{formatCurrency(calculateSplitRemaining())}</span>
-                    </p>
-                  </div>
-
-                  {/* Added payments list */}
-                  {splitPayments.length > 0 && (
-                    <div className="space-y-2">
-                      {splitPayments.map((sp, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-white rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-1 text-xs rounded ${
-                              sp.method === 'CASH' ? 'bg-green-100 text-green-700' :
-                              sp.method === 'CARD' ? 'bg-blue-100 text-blue-700' :
-                              'bg-purple-100 text-purple-700'
-                            }`}>
-                              {sp.method === 'CASH' ? 'Efectivo' : sp.method === 'CARD' ? 'Tarjeta' : 'Transferencia'}
-                            </span>
-                            <span className="font-medium">{formatCurrency(sp.amount)}</span>
-                          </div>
-                          <button
-                            onClick={() => removeSplitPayment(index)}
-                            className="text-red-500 hover:text-red-700 p-1"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Add new split payment */}
-                  {calculateSplitRemaining() > 0 && (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-3 gap-2">
-                        {([
-                          { value: 'CASH', label: 'Efectivo', icon: Banknote },
-                          { value: 'CARD', label: 'Tarjeta', icon: CreditCard },
-                          { value: 'TRANSFER', label: 'Transfer.', icon: DollarSign },
-                        ] as const).map((method) => (
-                          <button
-                            key={method.value}
-                            onClick={() => setPaymentMethod(method.value)}
-                            className={`p-2 rounded-lg border text-center transition-all ${
-                              paymentMethod === method.value
-                                ? 'border-blue-500 bg-blue-100 text-blue-700'
-                                : 'border-gray-200 bg-white hover:border-gray-300'
-                            }`}
-                          >
-                            <method.icon className="h-4 w-4 mx-auto mb-1" />
-                            <span className="text-xs">{method.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={splitAmount}
-                          onChange={(e) => setSplitAmount(e.target.value)}
-                          placeholder="Monto"
-                          className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <button
-                          onClick={() => setSplitAmount(calculateSplitRemaining().toString())}
-                          className="px-3 py-2 text-xs border rounded-lg hover:bg-gray-50"
-                        >
-                          Todo
-                        </button>
-                        <button
-                          onClick={addSplitPayment}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                          Agregar
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Summary */}
-                  {splitPayments.length > 0 && (
-                    <div className="pt-3 border-t border-blue-200">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-blue-600">Total pagado:</span>
-                        <span className="font-bold text-blue-800">
-                          {formatCurrency(splitPayments.reduce((sum, p) => sum + p.amount, 0))}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {/* Payment method - normal mode */}
-                  <div className="space-y-3">
-                    <p className="text-sm font-medium text-gray-700">Método de pago</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {([
-                        { value: 'CASH', label: 'Efectivo', icon: Banknote },
-                        { value: 'CARD', label: 'Tarjeta', icon: CreditCard },
-                        { value: 'TRANSFER', label: 'Transferencia', icon: DollarSign },
-                      ] as const).map((method) => (
-                        <button
-                          key={method.value}
-                          onClick={() => setPaymentMethod(method.value)}
-                          className={`p-3 rounded-lg border text-center transition-all ${
-                            paymentMethod === method.value
-                              ? 'border-gray-900 bg-gray-900 text-white'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <method.icon className="h-5 w-5 mx-auto mb-1" />
-                          <span className="text-xs">{method.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Cash input */}
-                  {paymentMethod === 'CASH' && (
+              {/* Cash input */}
+              {paymentMethod === 'CASH' && (
                     <div className="space-y-3">
                       <label className="text-sm font-medium text-gray-700">Monto recibido</label>
                       <input
@@ -1279,8 +1050,6 @@ export default function CajeroPage() {
                       )}
                     </div>
                   )}
-                </>
-              )}
 
               {/* Actions */}
               <div className="flex gap-3 pt-4">
@@ -1293,7 +1062,7 @@ export default function CajeroPage() {
                 </button>
                 <button
                   onClick={handlePayment}
-                  disabled={processing || (!splitPaymentMode && paymentMethod === 'CASH' && (!receivedAmount || parseFloat(receivedAmount) < calculateFinalTotal())) || (splitPaymentMode && calculateSplitRemaining() > 0)}
+                  disabled={processing || (paymentMethod === 'CASH' && (!receivedAmount || parseFloat(receivedAmount) < calculateFinalTotal()))}
                   className="flex-1 py-3 bg-gray-900 text-white rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {processing ? (
@@ -1301,7 +1070,7 @@ export default function CajeroPage() {
                   ) : (
                     <>
                       <CheckCircle className="h-5 w-5" />
-                      {splitPaymentMode ? 'Cobrar Dividido' : 'Cobrar'}
+                      Cobrar
                     </>
                   )}
                 </button>
@@ -1391,201 +1160,77 @@ export default function CajeroPage() {
                 </div>
               </div>
 
-              {/* Split payment toggle */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Dividir cuenta</p>
-                  <p className="text-xs text-gray-500">Pagar con múltiples métodos</p>
+              {/* Payment method */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-700">Método de pago</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: 'CASH', label: 'Efectivo', icon: Banknote },
+                    { value: 'CARD', label: 'Tarjeta', icon: CreditCard },
+                    { value: 'TRANSFER', label: 'Transferencia', icon: DollarSign },
+                  ] as const).map((method) => (
+                    <button
+                      key={method.value}
+                      onClick={() => setPaymentMethod(method.value)}
+                      className={`p-3 rounded-lg border text-center transition-all ${
+                        paymentMethod === method.value
+                          ? 'border-gray-900 bg-gray-900 text-white'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <method.icon className="h-5 w-5 mx-auto mb-1" />
+                      <span className="text-xs">{method.label}</span>
+                    </button>
+                  ))}
                 </div>
-                <button
-                  onClick={() => {
-                    setSplitPaymentMode(!splitPaymentMode)
-                    if (splitPaymentMode) {
-                      setSplitPayments([])
-                      setSplitAmount('')
-                    }
-                  }}
-                  className={`w-12 h-6 rounded-full transition-colors ${
-                    splitPaymentMode ? 'bg-blue-600' : 'bg-gray-300'
-                  }`}
-                >
-                  <div className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
-                    splitPaymentMode ? 'translate-x-6' : 'translate-x-0.5'
-                  }`} />
-                </button>
               </div>
 
-              {/* Split payment mode */}
-              {splitPaymentMode ? (
-                <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-blue-800">Pagos divididos</p>
-                    <p className="text-sm text-blue-600">
-                      Restante: <span className="font-bold">{formatCurrency(calculateSplitRemaining())}</span>
-                    </p>
+              {/* Cash input */}
+              {paymentMethod === 'CASH' && (
+                <div className="space-y-3">
+                  <label className="text-sm font-medium text-gray-700">Monto recibido</label>
+                  <input
+                    type="number"
+                    value={receivedAmount}
+                    onChange={(e) => setReceivedAmount(e.target.value)}
+                    placeholder={`Mínimo: ${formatCurrency(calculateFinalTotal())}`}
+                    min="0"
+                    step="100"
+                    autoFocus
+                    className={`w-full px-4 py-3 border rounded-lg text-lg font-medium focus:outline-none focus:ring-2 focus:ring-gray-900 ${
+                      receivedAmount && parseFloat(receivedAmount) < calculateFinalTotal() 
+                        ? 'border-red-300 bg-red-50' 
+                        : 'border-gray-200'
+                    }`}
+                  />
+                  
+                  {/* Quick amounts */}
+                  <div className="flex gap-2 flex-wrap">
+                    {[calculateFinalTotal(), 
+                      Math.ceil(calculateFinalTotal() / 1000) * 1000,
+                      Math.ceil(calculateFinalTotal() / 5000) * 5000,
+                      Math.ceil(calculateFinalTotal() / 10000) * 10000,
+                      Math.ceil(calculateFinalTotal() / 20000) * 20000,
+                    ].filter((v, i, a) => a.indexOf(v) === i && v >= calculateFinalTotal()).slice(0, 5).map((amount) => (
+                      <button
+                        key={amount}
+                        onClick={() => setReceivedAmount(amount.toString())}
+                        className={`px-3 py-1 text-sm border rounded-lg hover:bg-gray-50 ${
+                          receivedAmount === amount.toString() ? 'border-gray-900 bg-gray-100' : 'border-gray-200'
+                        }`}
+                      >
+                        {formatCurrency(amount)}
+                      </button>
+                    ))}
                   </div>
-
-                  {/* Added payments list */}
-                  {splitPayments.length > 0 && (
-                    <div className="space-y-2">
-                      {splitPayments.map((sp, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-white rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <span className={`px-2 py-1 text-xs rounded ${
-                              sp.method === 'CASH' ? 'bg-green-100 text-green-700' :
-                              sp.method === 'CARD' ? 'bg-blue-100 text-blue-700' :
-                              'bg-purple-100 text-purple-700'
-                            }`}>
-                              {sp.method === 'CASH' ? 'Efectivo' : sp.method === 'CARD' ? 'Tarjeta' : 'Transferencia'}
-                            </span>
-                            <span className="font-medium">{formatCurrency(sp.amount)}</span>
-                          </div>
-                          <button
-                            onClick={() => removeSplitPayment(index)}
-                            className="text-red-500 hover:text-red-700 p-1"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Add new split payment */}
-                  {calculateSplitRemaining() > 0 && (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-3 gap-2">
-                        {([
-                          { value: 'CASH', label: 'Efectivo', icon: Banknote },
-                          { value: 'CARD', label: 'Tarjeta', icon: CreditCard },
-                          { value: 'TRANSFER', label: 'Transfer.', icon: DollarSign },
-                        ] as const).map((method) => (
-                          <button
-                            key={method.value}
-                            onClick={() => setPaymentMethod(method.value)}
-                            className={`p-2 rounded-lg border text-center transition-all ${
-                              paymentMethod === method.value
-                                ? 'border-blue-500 bg-blue-100 text-blue-700'
-                                : 'border-gray-200 bg-white hover:border-gray-300'
-                            }`}
-                          >
-                            <method.icon className="h-4 w-4 mx-auto mb-1" />
-                            <span className="text-xs">{method.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={splitAmount}
-                          onChange={(e) => setSplitAmount(e.target.value)}
-                          placeholder="Monto"
-                          className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <button
-                          onClick={() => setSplitAmount(calculateSplitRemaining().toString())}
-                          className="px-3 py-2 text-xs border rounded-lg hover:bg-gray-50"
-                        >
-                          Todo
-                        </button>
-                        <button
-                          onClick={addSplitPayment}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                          Agregar
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Summary */}
-                  {splitPayments.length > 0 && (
-                    <div className="pt-3 border-t border-blue-200">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-blue-600">Total pagado:</span>
-                        <span className="font-bold text-blue-800">
-                          {formatCurrency(splitPayments.reduce((sum, p) => sum + p.amount, 0))}
-                        </span>
-                      </div>
+                  
+                  {parseFloat(receivedAmount) >= calculateFinalTotal() && (
+                    <div className="bg-green-50 text-green-700 p-3 rounded-lg flex items-center justify-between">
+                      <span className="font-medium">Cambio:</span>
+                      <span className="text-xl font-bold">{formatCurrency(calculateChange())}</span>
                     </div>
                   )}
                 </div>
-              ) : (
-                <>
-                  {/* Payment method - normal mode */}
-                  <div className="space-y-3">
-                    <p className="text-sm font-medium text-gray-700">Método de pago</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {([
-                        { value: 'CASH', label: 'Efectivo', icon: Banknote },
-                        { value: 'CARD', label: 'Tarjeta', icon: CreditCard },
-                        { value: 'TRANSFER', label: 'Transferencia', icon: DollarSign },
-                      ] as const).map((method) => (
-                        <button
-                          key={method.value}
-                          onClick={() => setPaymentMethod(method.value)}
-                          className={`p-3 rounded-lg border text-center transition-all ${
-                            paymentMethod === method.value
-                              ? 'border-blue-600 bg-blue-600 text-white'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <method.icon className="h-5 w-5 mx-auto mb-1" />
-                          <span className="text-xs">{method.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Cash input */}
-                  {paymentMethod === 'CASH' && (
-                    <div className="space-y-3">
-                      <label className="text-sm font-medium text-gray-700">Monto recibido</label>
-                      <input
-                        type="number"
-                        value={receivedAmount}
-                        onChange={(e) => setReceivedAmount(e.target.value)}
-                        placeholder={`Mínimo: ${formatCurrency(calculateFinalTotal())}`}
-                        min="0"
-                        step="100"
-                        autoFocus
-                        className={`w-full px-4 py-3 border rounded-lg text-lg font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                          receivedAmount && parseFloat(receivedAmount) < calculateFinalTotal() 
-                            ? 'border-red-300 bg-red-50' 
-                            : 'border-gray-200'
-                        }`}
-                      />
-                      
-                      {/* Quick amounts */}
-                      <div className="flex gap-2 flex-wrap">
-                        {[calculateFinalTotal(), 
-                          Math.ceil(calculateFinalTotal() / 1000) * 1000,
-                          Math.ceil(calculateFinalTotal() / 5000) * 5000,
-                          Math.ceil(calculateFinalTotal() / 10000) * 10000,
-                          Math.ceil(calculateFinalTotal() / 20000) * 20000,
-                        ].filter((v, i, a) => a.indexOf(v) === i && v >= calculateFinalTotal()).slice(0, 5).map((amount) => (
-                          <button
-                            key={amount}
-                            onClick={() => setReceivedAmount(amount.toString())}
-                            className={`px-3 py-1 text-sm border rounded-lg hover:bg-gray-50 ${
-                              receivedAmount === amount.toString() ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                            }`}
-                          >
-                            {formatCurrency(amount)}
-                          </button>
-                        ))}
-                      </div>
-                      
-                      {parseFloat(receivedAmount) >= calculateFinalTotal() && (
-                        <div className="bg-green-50 text-green-700 p-3 rounded-lg flex items-center justify-between">
-                          <span className="font-medium">Cambio:</span>
-                          <span className="text-xl font-bold">{formatCurrency(calculateChange())}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
               )}
 
               {/* Actions */}
@@ -1599,15 +1244,15 @@ export default function CajeroPage() {
                 </button>
                 <button
                   onClick={handlePayment}
-                  disabled={processing || (!splitPaymentMode && paymentMethod === 'CASH' && (!receivedAmount || parseFloat(receivedAmount) < calculateFinalTotal())) || (splitPaymentMode && calculateSplitRemaining() > 0)}
-                  className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={processing || (paymentMethod === 'CASH' && (!receivedAmount || parseFloat(receivedAmount) < calculateFinalTotal()))}
+                  className="flex-1 py-3 bg-gray-900 text-white rounded-lg font-medium flex items-center justify-center gap-2 hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {processing ? (
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                   ) : (
                     <>
                       <CheckCircle className="h-5 w-5" />
-                      {splitPaymentMode ? 'Cobrar Dividido' : 'Cobrar'}
+                      Cobrar
                     </>
                   )}
                 </button>

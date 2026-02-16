@@ -143,83 +143,79 @@ export function saveLogoUrl(url: string | null): void {
 // Generar contenido del ticket de cuenta (para cliente)
 export function generateInvoiceTicket(order: OrderData): string {
   const config = getConfig()
-  const width = config.paperWidth === 58 ? 32 : 48
+  const width = config.paperWidth === 58 ? 32 : 42
   const separator = '-'.repeat(width)
   const doubleSeparator = '='.repeat(width)
   const lines: string[] = []
 
-  // Encabezado
+  // Encabezado centrado
   lines.push(centerText(config.restaurantName, width))
   if (config.nit) lines.push(centerText(`NIT: ${config.nit}`, width))
   if (config.address) lines.push(centerText(config.address, width))
   if (config.phone) lines.push(centerText(`Tel: ${config.phone}`, width))
   lines.push(doubleSeparator)
 
-  // Info de orden
-  lines.push(`Factura: #${order.orderNumber}`)
-  if (order.tableName) lines.push(`Mesa: ${order.tableName}`)
-  if (order.waiterName) lines.push(`Atendido por: ${order.waiterName}`)
-  lines.push(`Fecha: ${new Date(order.createdAt || Date.now()).toLocaleString('es-CO', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  })}`)
+  // Info compacta
+  const dateStr = new Date(order.createdAt || Date.now()).toLocaleString('es-CO', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })
+  lines.push(leftRightText(`#${order.orderNumber}`, dateStr, width))
+  if (order.tableName) {
+    const waiterStr = order.waiterName ? `  ${order.waiterName}` : ''
+    lines.push(`Mesa: ${order.tableName}${waiterStr}`)
+  } else if (order.waiterName) {
+    lines.push(`Atendido: ${order.waiterName}`)
+  }
   lines.push(separator)
 
-  // Items
-  lines.push(leftRightText('CANT. DESCRIPCIÓN', 'PRECIO', width))
-  lines.push(separator)
-
+  // Items - compactos en una sola línea
   order.items.forEach(item => {
-    const itemTotal = item.quantity * item.unitPrice
-    const itemName = item.product.name.substring(0, width - 15)
-    lines.push(`${item.quantity}x   ${itemName}`)
-    lines.push(leftRightText('', formatPrice(itemTotal), width))
+    const qty = `${item.quantity}x`
+    const price = formatPrice(item.quantity * item.unitPrice)
+    const maxName = width - qty.length - price.length - 2
+    const name = item.product.name.length > maxName
+      ? item.product.name.substring(0, maxName)
+      : item.product.name
+    lines.push(leftRightText(`${qty} ${name}`, price, width))
   })
 
   lines.push(separator)
 
-  // Totales
-  lines.push(leftRightText('Subtotal:', formatPrice(order.subtotal || 0), width))
-
+  // Totales compactos
   if (order.discount && order.discount > 0) {
-    lines.push(leftRightText('Descuento:', `-${formatPrice(order.discount)}`, width))
+    lines.push(leftRightText('Subtotal', formatPrice(order.subtotal || 0), width))
+    lines.push(leftRightText('Descuento', `-${formatPrice(order.discount)}`, width))
   }
-
-  lines.push(leftRightText('IVA:', formatPrice(order.tax || 0), width))
-
+  lines.push(leftRightText('IVA', formatPrice(order.tax || 0), width))
   if (order.tip && order.tip > 0) {
-    lines.push(leftRightText('Propina:', formatPrice(order.tip), width))
+    lines.push(leftRightText('Propina', formatPrice(order.tip), width))
   }
-
   lines.push(doubleSeparator)
-  lines.push(leftRightText('TOTAL:', formatPrice(order.total), width))
+  lines.push(leftRightText('TOTAL', formatPrice(order.total), width))
   lines.push(doubleSeparator)
 
-  // Método de pago
+  // Pago
   if (order.paymentMethod) {
     const methodNames: Record<string, string> = {
-      'cash': 'Efectivo',
-      'card': 'Tarjeta',
-      'transfer': 'Transferencia',
-      'mixed': 'Mixto'
+      'cash': 'Efectivo', 'CASH': 'Efectivo',
+      'card': 'Tarjeta', 'CARD': 'Tarjeta',
+      'transfer': 'Transferencia', 'TRANSFER': 'Transferencia',
+      'mixed': 'Mixto', 'SPLIT': 'Mixto'
     }
-    lines.push(`Método: ${methodNames[order.paymentMethod] || order.paymentMethod}`)
-  }
-
-  if (order.paymentMethod === 'cash' && order.receivedAmount) {
-    lines.push(leftRightText('Recibido:', formatPrice(order.receivedAmount), width))
-    lines.push(leftRightText('Cambio:', formatPrice(order.changeAmount || 0), width))
+    const method = methodNames[order.paymentMethod] || order.paymentMethod
+    if ((order.paymentMethod === 'cash' || order.paymentMethod === 'CASH') && order.receivedAmount) {
+      lines.push(leftRightText(`Pago: ${method}`, formatPrice(order.receivedAmount), width))
+      lines.push(leftRightText('Cambio', formatPrice(order.changeAmount || 0), width))
+    } else {
+      lines.push(`Pago: ${method}`)
+    }
   }
 
   lines.push('')
-  lines.push(separator)
   if (config.footer) {
     lines.push(centerText(config.footer, width))
   }
-  lines.push('')
   lines.push('')
   lines.push('')
 

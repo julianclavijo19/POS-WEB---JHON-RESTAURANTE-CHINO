@@ -29,11 +29,7 @@ export default function LoginPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        console.log('[LOGIN] Error response:', JSON.stringify(data, null, 2))
         toast.error(data.error || 'Credenciales incorrectas')
-        if (data.debug) {
-          console.log('[LOGIN] Debug:', data.debug)
-        }
         setIsLoading(false)
         return
       }

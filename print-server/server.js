@@ -86,7 +86,7 @@ function delay(ms) {
 }
 
 /**
- * Envía comando ESC/POS para abrir caja monedera por TCP (RJ11 a impresora).
+ * Envía comando ESC/POS para abrir caja monedera por TCP.
  */
 function openCashDrawerTcp() {
   return new Promise((resolve, reject) => {
@@ -616,13 +616,13 @@ app.listen(CONFIG.server.port, CONFIG.server.host, () => {
     }
   }, CHECK_INTERVAL_MS);
 
-  // Long polling a Vercel: una sola petición en bucle (menos invocaciones = ahorro plan Vercel)
-  const POLL_BASE_URL = (process.env.VERCEL_APP_URL || process.env.PRINT_POLLING_URL || '').replace(/\/$/, '');
+  // Long polling a la app (Railway): una sola petición en bucle
+  const POLL_BASE_URL = (process.env.PRINT_POLLING_URL || process.env.VERCEL_APP_URL || '').replace(/\/$/, '');
   const POLL_SECRET = process.env.PRINT_POLLING_SECRET || '';
 
   if (POLL_BASE_URL && POLL_SECRET) {
     const pollUrl = POLL_BASE_URL + '/api/print-queue?longPoll=1';
-    logInfo('Long polling a Vercel activado', { url: pollUrl });
+    logInfo('Long polling a la app activado', { url: pollUrl });
 
     async function longPollLoop() {
       while (true) {
@@ -670,7 +670,7 @@ app.listen(CONFIG.server.port, CONFIG.server.host, () => {
     }
     longPollLoop();
   } else {
-    logInfo('Long polling a Vercel desactivado (configure VERCEL_APP_URL y PRINT_POLLING_SECRET para activar)');
+    logInfo('Long polling desactivado (configure PRINT_POLLING_URL y PRINT_POLLING_SECRET para activar)');
   }
 });
 

@@ -292,16 +292,21 @@ export async function POST(request: Request) {
     if (error) throw error
 
     // Register the refund as a negative payment to reflect in cash register
-    // This ensures the refund amount is deducted from the shift totals
-    const refundMethod = payment_method || 'CASH'
+    // Map payment methods to valid DB values (CASH, CARD, TRANSFER, OTHER)
+    const methodMap: Record<string, string> = {
+      'CASH': 'CASH', 'CARD': 'CARD', 'TRANSFER': 'TRANSFER',
+      'NEQUI': 'TRANSFER', 'DAVIPLATA': 'TRANSFER', 'OTHER': 'OTHER'
+    }
+    const refundMethod = methodMap[(payment_method || 'CASH').toUpperCase()] || 'CASH'
     
-    // Build payment row - only include columns that exist
+    // Build payment row
     const refundPaymentRow: Record<string, unknown> = {
       order_id,
       method: refundMethod,
       amount: -Math.abs(amount), // Negative amount for refund
       received_amount: 0,
       change_amount: 0,
+      reference: `REFUND-${data.id}`,
     }
 
     // Try inserting with optional columns first, fallback without them
@@ -331,7 +336,7 @@ export async function POST(request: Request) {
     }
 
     if (!paymentInserted) {
-      console.error('WARNING: Refund payment could not be created. Cash register totals may not reflect this refund.')
+      console.warn('WARNING: Refund payment could not be created. Refund is still tracked in refunds table.')
     }
 
     return NextResponse.json({ 

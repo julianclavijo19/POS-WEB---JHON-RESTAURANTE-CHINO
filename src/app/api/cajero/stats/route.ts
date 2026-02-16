@@ -15,20 +15,16 @@ export async function GET() {
     const todayStart = `${y}-${m}-${d}T00:00:00-05:00`
     const todayEnd = `${y}-${m}-${d}T23:59:59.999-05:00`
 
-    // Pagos de hoy (incluye pagos normales y devoluciones con monto negativo)
+    // Pagos de hoy (solo pagos positivos = ventas)
     const { data: todayPayments } = await supabase
       .from('payments')
       .select('id, amount, method, order_id')
       .gte('created_at', todayStart)
       .lte('created_at', todayEnd)
 
-    // Separar pagos normales de devoluciones (monto negativo)
     const normalPayments = (todayPayments || []).filter(p => Number(p.amount) > 0)
-    const refundPayments = (todayPayments || []).filter(p => Number(p.amount) < 0)
 
     const ventasBruto = normalPayments.reduce((sum, p) => sum + Number(p.amount), 0)
-    const totalDevoluciones = Math.abs(refundPayments.reduce((sum, p) => sum + Number(p.amount), 0))
-    const ventasHoy = ventasBruto - totalDevoluciones
     const ordenesHoy = normalPayments.length
 
     // Ventas por método de pago (solo pagos positivos)
@@ -36,10 +32,20 @@ export async function GET() {
     const tarjeta = normalPayments.filter(p => p.method === 'CARD').reduce((sum, p) => sum + Number(p.amount), 0)
     const transferencia = normalPayments.filter(p => p.method === 'TRANSFER').reduce((sum, p) => sum + Number(p.amount), 0)
 
-    // Devoluciones por método
-    const devEfectivo = Math.abs(refundPayments.filter(p => p.method === 'CASH').reduce((sum, p) => sum + Number(p.amount), 0))
-    const devTarjeta = Math.abs(refundPayments.filter(p => p.method === 'CARD').reduce((sum, p) => sum + Number(p.amount), 0))
-    const devTransferencia = Math.abs(refundPayments.filter(p => p.method === 'TRANSFER').reduce((sum, p) => sum + Number(p.amount), 0))
+    // Devoluciones from refunds table (source of truth)
+    const { data: refundsData } = await supabase
+      .from('refunds')
+      .select('amount, payment_method, status')
+      .eq('status', 'APPROVED')
+      .gte('created_at', todayStart)
+      .lte('created_at', todayEnd)
+
+    const totalDevoluciones = (refundsData || []).reduce((sum, r) => sum + Number(r.amount || 0), 0)
+    const devEfectivo = (refundsData || []).filter(r => r.payment_method === 'CASH').reduce((sum, r) => sum + Number(r.amount || 0), 0)
+    const devTarjeta = (refundsData || []).filter(r => r.payment_method === 'CARD').reduce((sum, r) => sum + Number(r.amount || 0), 0)
+    const devTransferencia = (refundsData || []).filter(r => r.payment_method === 'TRANSFER').reduce((sum, r) => sum + Number(r.amount || 0), 0)
+
+    const ventasHoy = ventasBruto - totalDevoluciones
 
     // Órdenes pendientes de cobro (READY, SERVED o DELIVERED que no tengan pago)
     const { data: pendingOrders, count: ordenesPendientes } = await supabase

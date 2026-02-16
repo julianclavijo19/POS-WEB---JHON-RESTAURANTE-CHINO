@@ -9,7 +9,7 @@ import {
   CreditCard, Banknote, X, Printer, CheckCircle,
   Clock, TrendingUp, Wallet, AlertCircle, ArrowRight,
   Play, Square, Receipt, ChevronRight, AlertTriangle,
-  ShoppingBag, Truck, Edit2
+  ShoppingBag, Truck, Edit2, RotateCcw
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { printInvoice, type OrderData } from '@/lib/printer'
@@ -62,6 +62,7 @@ interface Shift {
   card_sales: number
   transfer_sales: number
   total_sales: number
+  total_refunds?: number
   total_orders: number
   status: string
   opened_at: string
@@ -588,7 +589,7 @@ export default function CajeroPage() {
       </div>
 
       {/* Stats del turno */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -644,6 +645,22 @@ export default function CajeroPage() {
             </div>
           </CardContent>
         </Card>
+
+        {(shift.total_refunds || 0) > 0 && (
+          <Card className="border-red-200 bg-red-50">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <RotateCcw className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-red-500">Devoluciones</p>
+                  <p className="text-lg font-semibold text-red-600">-{formatCurrency(shift.total_refunds || 0)}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         
         <Card>
           <CardContent className="p-4">
@@ -1289,6 +1306,12 @@ export default function CajeroPage() {
                   <span className="text-gray-500">Transferencias</span>
                   <span className="font-medium">{formatCurrency(shift.transfer_sales)}</span>
                 </div>
+                {(shift.total_refunds || 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-red-500">Devoluciones</span>
+                    <span className="font-medium text-red-600">-{formatCurrency(shift.total_refunds || 0)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-medium pt-2 border-t">
                   <span>Efectivo esperado</span>
                   <span>{formatCurrency(shift.opening_amount + shift.cash_sales)}</span>

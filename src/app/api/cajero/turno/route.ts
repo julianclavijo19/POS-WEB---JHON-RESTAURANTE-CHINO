@@ -55,21 +55,52 @@ export async function GET() {
         .gte('created_at', currentShift.opened_at)
         .order('created_at', { ascending: false })
 
-      // Calcular totales por método (incluye devoluciones = amount negativo)
-      const cashTotal = transactions?.filter(t => t.method === 'CASH').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
-      const cardTotal = transactions?.filter(t => t.method === 'CARD').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
-      const transferTotal = transactions?.filter(t => t.method === 'TRANSFER').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
+      // Also query refunds directly from the refunds table (source of truth)
+      const { data: refundsData } = await supabase
+        .from('refunds')
+        .select('id, amount, payment_method, status, created_at')
+        .eq('status', 'APPROVED')
+        .gte('created_at', currentShift.opened_at)
+
+      const totalRefunds = (refundsData || []).reduce((s, r) => s + Number(r.amount || 0), 0)
+
+      // Calculate totals from positive payments only (sales)
+      const allTx = transactions || []
+      const positiveTx = allTx.filter(t => Number(t.amount) > 0)
+      const normalOrderCount = positiveTx.length
+
+      const cashSales = positiveTx.filter(t => t.method === 'CASH').reduce((s, t) => s + Number(t.amount || 0), 0)
+      const cardSales = positiveTx.filter(t => t.method === 'CARD').reduce((s, t) => s + Number(t.amount || 0), 0)
+      const transferSales = positiveTx.filter(t => t.method === 'TRANSFER').reduce((s, t) => s + Number(t.amount || 0), 0)
+      const nequiSales = positiveTx.filter(t => t.method === 'NEQUI').reduce((s, t) => s + Number(t.amount || 0), 0)
+      const daviplata = positiveTx.filter(t => t.method === 'DAVIPLATA').reduce((s, t) => s + Number(t.amount || 0), 0)
+      const otherSales = positiveTx.filter(t => !['CASH','CARD','TRANSFER','NEQUI','DAVIPLATA'].includes(t.method)).reduce((s, t) => s + Number(t.amount || 0), 0)
+
+      const totalBruto = cashSales + cardSales + transferSales + nequiSales + daviplata + otherSales
+      const totalNeto = totalBruto - totalRefunds
+
+      // Refund breakdown by method (from refunds table)
+      const refCash = (refundsData || []).filter(r => r.payment_method === 'CASH').reduce((s, r) => s + Number(r.amount || 0), 0)
+      const refCard = (refundsData || []).filter(r => r.payment_method === 'CARD').reduce((s, r) => s + Number(r.amount || 0), 0)
+      const refTransfer = (refundsData || []).filter(r => r.payment_method === 'TRANSFER').reduce((s, r) => s + Number(r.amount || 0), 0)
 
       return NextResponse.json({
         shift: {
           ...currentShift,
-          cash_sales: cashTotal,
-          card_sales: cardTotal,
-          transfer_sales: transferTotal,
-          total_sales: cashTotal + cardTotal + transferTotal,
-          total_orders: transactions?.length || 0
+          cash_sales: cashSales - refCash,
+          card_sales: cardSales - refCard,
+          transfer_sales: transferSales - refTransfer,
+          nequi_sales: nequiSales,
+          daviplata_sales: daviplata,
+          other_sales: otherSales,
+          total_sales: totalNeto,
+          total_bruto: totalBruto,
+          total_refunds: totalRefunds,
+          refunds_count: (refundsData || []).length,
+          total_orders: normalOrderCount
         },
-        transactions: transactions || [],
+        transactions: allTx,
+        refunds: refundsData || [],
         isOpen: true
       })
     }
@@ -220,19 +251,38 @@ export async function PUT(request: Request) {
       )
     }
 
-    // Calcular ventas del turno (incluye devoluciones = amount negativo)
+    // Calculate sales from positive payments
     const { data: transactions } = await supabase
       .from('payments')
       .select('amount, method')
       .gte('created_at', shift.opened_at)
 
-    const cashSales = transactions?.filter(t => t.method === 'CASH').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
-    const cardSales = transactions?.filter(t => t.method === 'CARD').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
-    const transferSales = transactions?.filter(t => t.method === 'TRANSFER').reduce((s, t) => s + Number(t.amount || 0), 0) || 0
-    const totalSales = cashSales + cardSales + transferSales
+    const positiveTx = (transactions || []).filter(t => Number(t.amount) > 0)
+    const cashSales = positiveTx.filter(t => t.method === 'CASH').reduce((s, t) => s + Number(t.amount || 0), 0)
+    const cardSales = positiveTx.filter(t => t.method === 'CARD').reduce((s, t) => s + Number(t.amount || 0), 0)
+    const transferSales = positiveTx.filter(t => t.method === 'TRANSFER').reduce((s, t) => s + Number(t.amount || 0), 0)
+    const otherMethodSales = positiveTx.filter(t => !['CASH','CARD','TRANSFER'].includes(t.method)).reduce((s, t) => s + Number(t.amount || 0), 0)
+    const totalBruto = cashSales + cardSales + transferSales + otherMethodSales
 
-    // Calcular monto esperado (apertura + ventas en efectivo)
-    const expectedAmount = Number(shift.opening_amount) + cashSales
+    // Get refunds from the refunds table (source of truth)
+    const { data: refundsData } = await supabase
+      .from('refunds')
+      .select('amount, payment_method, status')
+      .eq('status', 'APPROVED')
+      .gte('created_at', shift.opened_at)
+
+    const totalRefunds = (refundsData || []).reduce((s, r) => s + Number(r.amount || 0), 0)
+    const refCash = (refundsData || []).filter(r => r.payment_method === 'CASH').reduce((s, r) => s + Number(r.amount || 0), 0)
+    const refCard = (refundsData || []).filter(r => r.payment_method === 'CARD').reduce((s, r) => s + Number(r.amount || 0), 0)
+    const refTransfer = (refundsData || []).filter(r => r.payment_method === 'TRANSFER').reduce((s, r) => s + Number(r.amount || 0), 0)
+
+    const netCash = cashSales - refCash
+    const netCard = cardSales - refCard
+    const netTransfer = transferSales - refTransfer
+    const totalNeto = totalBruto - totalRefunds
+
+    // Calcular monto esperado (apertura + ventas netas en efectivo)
+    const expectedAmount = Number(shift.opening_amount) + netCash
     const difference = (closing_amount || 0) - expectedAmount
 
     // Cerrar el turno
@@ -243,11 +293,11 @@ export async function PUT(request: Request) {
         closing_amount: closing_amount || 0,
         expected_amount: expectedAmount,
         difference: difference,
-        cash_sales: cashSales,
-        card_sales: cardSales,
-        transfer_sales: transferSales,
-        total_sales: totalSales,
-        total_orders: transactions?.length || 0,
+        cash_sales: netCash,
+        card_sales: netCard,
+        transfer_sales: netTransfer,
+        total_sales: totalNeto,
+        total_orders: positiveTx.length,
         notes: notes,
         closed_at: new Date().toISOString()
       })
@@ -262,14 +312,15 @@ export async function PUT(request: Request) {
       shift: closedShift,
       summary: {
         opening_amount: Number(shift.opening_amount),
-        cash_sales: cashSales,
-        card_sales: cardSales,
-        transfer_sales: transferSales,
-        total_sales: totalSales,
+        cash_sales: netCash,
+        card_sales: netCard,
+        transfer_sales: netTransfer,
+        total_sales: totalNeto,
+        total_refunds: totalRefunds,
         expected_amount: expectedAmount,
         closing_amount: closing_amount || 0,
         difference: difference,
-        total_orders: transactions?.length || 0
+        total_orders: positiveTx.length
       },
       message: 'Turno cerrado exitosamente'
     })

@@ -5,7 +5,7 @@
 
 -- 1. Eliminar TODOS los usuarios existentes
 -- (primero limpiar referencias en otras tablas)
-UPDATE orders SET user_id = NULL WHERE user_id IS NOT NULL;
+UPDATE orders SET waiter_id = NULL WHERE waiter_id IS NOT NULL;
 UPDATE cash_registers SET user_id = NULL WHERE user_id IS NOT NULL;
 UPDATE refunds SET created_by = NULL WHERE created_by IS NOT NULL;
 UPDATE refunds SET approved_by = NULL WHERE approved_by IS NOT NULL;

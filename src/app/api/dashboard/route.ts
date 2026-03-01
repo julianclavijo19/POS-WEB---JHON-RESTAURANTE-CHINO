@@ -47,6 +47,10 @@ export async function GET(request: Request) {
       } else if (period === 'month') {
         startDate = new Date(todayStartUTC.getTime() - (30 * 24 * 60 * 60 * 1000))
         endDate = todayEndUTC
+      } else if (period === 'year') {
+        // Desde el 1 de enero del año actual en Colombia
+        startDate = new Date(Date.UTC(year, 0, 1, COLOMBIA_OFFSET_HOURS, 0, 0, 0))
+        endDate = todayEndUTC
       } else {
         startDate = todayStartUTC
         endDate = todayEndUTC
@@ -91,38 +95,59 @@ export async function GET(request: Request) {
     const totalSales = totalSalesFromPayments
     const totalOrders = allOrders.length
 
-    // Ventas diarias (usar pagos del periodo ya filtrados)
+    // Ventas del periodo (diarias o mensuales según el filtro)
     const dailySales: { date: string; total: number }[] = []
-    const daysToShow = period === 'month' ? 30 : period === 'week' ? 7 : 1
     
     const nowUTC = new Date()
     const colombiaTime = new Date(nowUTC.getTime() - (COLOMBIA_OFFSET_HOURS * 60 * 60 * 1000))
     const todayYear = colombiaTime.getUTCFullYear()
     const todayMonth = colombiaTime.getUTCMonth()
     const todayDay = colombiaTime.getUTCDate()
-    
-    for (let i = daysToShow - 1; i >= 0; i--) {
-      const targetDate = new Date(Date.UTC(todayYear, todayMonth, todayDay - i))
-      const targetYear = targetDate.getUTCFullYear()
-      const targetMonth = targetDate.getUTCMonth()
-      const targetDay = targetDate.getUTCDate()
+
+    if (period === 'year') {
+      // Para el año: agrupar pagos por mes
+      const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+      for (let m = 0; m <= todayMonth; m++) {
+        const monthStartUTC = new Date(Date.UTC(todayYear, m, 1, COLOMBIA_OFFSET_HOURS, 0, 0, 0))
+        const monthEndUTC = new Date(Date.UTC(todayYear, m + 1, 1, COLOMBIA_OFFSET_HOURS - 1, 59, 59, 999))
+        
+        const monthPayments = paymentsList.filter(p => {
+          const pDate = new Date(p.created_at)
+          return pDate >= monthStartUTC && pDate <= monthEndUTC
+        })
+        
+        const monthTotal = monthPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        dailySales.push({
+          date: monthNames[m],
+          total: monthTotal
+        })
+      }
+    } else {
+      const daysToShow = period === 'month' ? 30 : period === 'week' ? 7 : 1
       
-      const dayStartUTC = new Date(Date.UTC(targetYear, targetMonth, targetDay, COLOMBIA_OFFSET_HOURS, 0, 0, 0))
-      const dayEndUTC = new Date(Date.UTC(targetYear, targetMonth, targetDay + 1, COLOMBIA_OFFSET_HOURS - 1, 59, 59, 999))
-      
-      const dayPayments = paymentsList.filter(p => {
-        const pDate = new Date(p.created_at)
-        return pDate >= dayStartUTC && pDate <= dayEndUTC
-      })
-      
-      const dayTotal = dayPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
-      
-      // Formatear la fecha para mostrar (en Colombia)
-      const displayDate = new Date(Date.UTC(targetYear, targetMonth, targetDay, 12, 0, 0)) // mediodía para evitar issues
-      dailySales.push({
-        date: displayDate.toLocaleDateString('es-CO', { weekday: 'short', day: '2-digit', timeZone: 'America/Bogota' }),
-        total: dayTotal
-      })
+      for (let i = daysToShow - 1; i >= 0; i--) {
+        const targetDate = new Date(Date.UTC(todayYear, todayMonth, todayDay - i))
+        const targetYear = targetDate.getUTCFullYear()
+        const targetMonth = targetDate.getUTCMonth()
+        const targetDay = targetDate.getUTCDate()
+        
+        const dayStartUTC = new Date(Date.UTC(targetYear, targetMonth, targetDay, COLOMBIA_OFFSET_HOURS, 0, 0, 0))
+        const dayEndUTC = new Date(Date.UTC(targetYear, targetMonth, targetDay + 1, COLOMBIA_OFFSET_HOURS - 1, 59, 59, 999))
+        
+        const dayPayments = paymentsList.filter(p => {
+          const pDate = new Date(p.created_at)
+          return pDate >= dayStartUTC && pDate <= dayEndUTC
+        })
+        
+        const dayTotal = dayPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        
+        // Formatear la fecha para mostrar (en Colombia)
+        const displayDate = new Date(Date.UTC(targetYear, targetMonth, targetDay, 12, 0, 0)) // mediodía para evitar issues
+        dailySales.push({
+          date: displayDate.toLocaleDateString('es-CO', { weekday: 'short', day: '2-digit', timeZone: 'America/Bogota' }),
+          total: dayTotal
+        })
+      }
     }
 
     // Productos más vendidos
@@ -159,16 +184,49 @@ export async function GET(request: Request) {
         _sum: { quantity: p.quantity }
       }))
 
-    // Mesas activas
-    const { count: activeTables } = await supabase
+    // Mesas activas - contar solo las que realmente tienen órdenes activas
+    // (no depender del campo status que puede estar desactualizado)
+    const { data: allActiveTables } = await supabase
       .from('tables')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'OCCUPIED')
-
-    const { count: totalTables } = await supabase
-      .from('tables')
-      .select('*', { count: 'exact', head: true })
+      .select('id, status')
       .eq('is_active', true)
+
+    let activeTablesCount = 0
+    if (allActiveTables && allActiveTables.length > 0) {
+      // Verificar cuáles realmente tienen órdenes activas
+      const { data: tablesWithActiveOrders } = await supabase
+        .from('orders')
+        .select('table_id')
+        .not('table_id', 'is', null)
+        .neq('status', 'PAID')
+        .neq('status', 'CANCELLED')
+
+      const occupiedTableIds = new Set(
+        (tablesWithActiveOrders || []).map(o => o.table_id)
+      )
+      
+      // Sincronizar mesas con estado incorrecto
+      for (const table of allActiveTables) {
+        const hasActiveOrder = occupiedTableIds.has(table.id)
+        if (hasActiveOrder) {
+          activeTablesCount++
+          if (table.status !== 'OCCUPIED') {
+            await supabase
+              .from('tables')
+              .update({ status: 'OCCUPIED', updated_at: new Date().toISOString() })
+              .eq('id', table.id)
+          }
+        } else if (table.status === 'OCCUPIED') {
+          // Mesa marcada como ocupada pero sin órdenes activas -> liberar
+          await supabase
+            .from('tables')
+            .update({ status: 'FREE', updated_at: new Date().toISOString() })
+            .eq('id', table.id)
+        }
+      }
+    }
+
+    const totalTablesCount = allActiveTables?.length || 0
 
     return NextResponse.json({
       totalSales,
@@ -181,8 +239,8 @@ export async function GET(request: Request) {
         transfer: transferSales
       },
       topProducts,
-      activeTables: activeTables || 0,
-      totalTables: totalTables || 0,
+      activeTables: activeTablesCount,
+      totalTables: totalTablesCount,
     })
   } catch (error) {
     console.error('Error fetching dashboard stats:', error)

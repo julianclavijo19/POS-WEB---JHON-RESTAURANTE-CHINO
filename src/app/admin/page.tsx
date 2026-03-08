@@ -179,9 +179,10 @@ export default function AdminDashboard() {
               const chartData = (stats?.dailySales || []).filter(d => d.total > 0 || period === 'today')
               const allData = stats?.dailySales || []
               const maxVal = Math.max(...allData.map(d => d.total), 1)
-              const showEveryNth = allData.length > 20 ? Math.ceil(allData.length / 10) : allData.length > 12 ? 2 : 1
-              const chartHeight = 160
-              const barAreaHeight = chartHeight - 30 // bottom label space
+              const showEveryNth = period === 'today' ? 3 : allData.length > 20 ? Math.ceil(allData.length / 10) : allData.length > 12 ? 2 : 1
+              const chartHeight = 180
+              const labelHeight = 20
+              const barAreaHeight = chartHeight - labelHeight
 
               return (
                 <div>
@@ -193,21 +194,21 @@ export default function AdminDashboard() {
                   {/* Chart */}
                   <div className="relative" style={{ height: chartHeight }}>
                     {/* Guide lines */}
-                    <svg className="absolute inset-0 w-full h-full" viewBox={`0 0 100 ${chartHeight}`} preserveAspectRatio="none">
+                    <svg className="absolute inset-0 w-full" style={{ height: barAreaHeight }} viewBox={`0 0 100 ${barAreaHeight}`} preserveAspectRatio="none">
                       {[0.25, 0.5, 0.75, 1].map((frac, i) => {
-                        const y = (chartHeight - 30) * (1 - frac)
+                        const y = barAreaHeight * (1 - frac)
                         return <line key={i} x1="0" y1={y} x2="100" y2={y} stroke="#f3f4f6" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
                       })}
                     </svg>
                     {/* Bars */}
-                    <div className="absolute inset-0 flex items-end pb-7 gap-px">
+                    <div className="flex items-end gap-px" style={{ height: barAreaHeight }}>
                       {allData.map((point, index) => {
                         const pct = maxVal > 0 ? (point.total / maxVal) * 100 : 0
                         const isHovered = hoveredBar === index
                         return (
                           <div
                             key={index}
-                            className="flex-1 flex flex-col items-center relative"
+                            className="flex-1 relative"
                             style={{ height: '100%' }}
                             onMouseEnter={() => setHoveredBar(index)}
                             onMouseLeave={() => setHoveredBar(null)}
@@ -219,7 +220,7 @@ export default function AdminDashboard() {
                               </div>
                             )}
                             {/* Bar */}
-                            <div className="w-full flex items-end" style={{ height: `${barAreaHeight}px` }}>
+                            <div className="w-full h-full flex items-end">
                               <div
                                 className="w-full rounded-t-sm transition-all duration-500"
                                 style={{
@@ -229,15 +230,21 @@ export default function AdminDashboard() {
                                 }}
                               />
                             </div>
-                            {/* Label */}
-                            {index % showEveryNth === 0 && (
-                              <span className="absolute bottom-0 text-[9px] text-gray-400 truncate" style={{ maxWidth: '100%' }}>
-                                {point.date}
-                              </span>
-                            )}
                           </div>
                         )
                       })}
+                    </div>
+                    {/* Labels row - separate from bars */}
+                    <div className="flex gap-px" style={{ height: labelHeight }}>
+                      {allData.map((point, index) => (
+                        <div key={index} className="flex-1 flex justify-center">
+                          {index % showEveryNth === 0 && (
+                            <span className="text-[8px] text-gray-400 truncate mt-1" style={{ maxWidth: '100%' }}>
+                              {period === 'today' ? point.date.replace(':00', 'h') : point.date}
+                            </span>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

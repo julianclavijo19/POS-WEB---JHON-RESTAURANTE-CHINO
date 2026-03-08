@@ -138,22 +138,19 @@ export default function HistorialCajaPage() {
                     <th className="px-4 py-3 font-medium">Tipo</th>
                     <th className="px-4 py-3 font-medium">Fecha</th>
                     <th className="px-4 py-3 font-medium">Responsable</th>
-                    <th className="px-4 py-3 font-medium text-right">Ventas</th>
+                    <th className="px-4 py-3 font-medium text-right">Ventas Total</th>
                     <th className="px-4 py-3 font-medium text-right">Base</th>
                     <th className="px-4 py-3 font-medium text-right">Efectivo</th>
                     <th className="px-4 py-3 font-medium text-right">Tarjeta</th>
-                    <th className="px-4 py-3 font-medium text-right">Transferencia</th>
-                    <th className="px-4 py-3 font-medium text-right">Total Cierre</th>
+                    <th className="px-4 py-3 font-medium text-right">Transfer</th>
+                    <th className="px-4 py-3 font-medium text-right">Esperado Caja</th>
+                    <th className="px-4 py-3 font-medium text-right">Conteo Cierre</th>
                     <th className="px-4 py-3 font-medium text-right">Diferencia</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {registers.map((register, index) => {
-                    // Total cierre = Base + Efectivo + Tarjeta + Transferencia
-                    const totalCierre = Number(register.opening_amount || 0) +
-                      Number(register.cash_sales || 0) +
-                      Number(register.card_sales || 0) +
-                      Number(register.transfer_sales || 0)
+                    const expectedCash = Number(register.opening_amount || 0) + Number(register.cash_sales || 0)
 
                     return (
                       <tr key={register.id} className="hover:bg-gray-50">
@@ -194,8 +191,14 @@ export default function HistorialCajaPage() {
                         <td className="px-4 py-3 text-sm text-gray-600 text-right">
                           {formatCurrency(register.transfer_sales)}
                         </td>
+                        <td className="px-4 py-3 text-sm text-blue-700 text-right font-medium">
+                          {formatCurrency(expectedCash)}
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-900 text-right font-semibold">
-                          {formatCurrency(totalCierre)}
+                          {register.status === 'CLOSED' && register.closing_amount !== null
+                            ? formatCurrency(register.closing_amount)
+                            : <span className="text-gray-400">Abierta</span>
+                          }
                         </td>
                         <td className={`px-4 py-3 text-sm text-right font-medium ${getDifferenceColor(register.difference)}`}>
                           {register.difference !== null && register.difference !== undefined ? (

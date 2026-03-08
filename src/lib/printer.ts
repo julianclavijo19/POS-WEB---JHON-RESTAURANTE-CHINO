@@ -144,58 +144,68 @@ export function saveLogoUrl(url: string | null): void {
 export function generateInvoiceTicket(order: OrderData): string {
   const config = getConfig()
   const width = config.paperWidth === 58 ? 32 : 42
-  const separator = '-'.repeat(width)
-  const doubleSeparator = '='.repeat(width)
+  const thinLine = '─'.repeat(width)
+  const thickLine = '━'.repeat(width)
   const lines: string[] = []
 
-  // Encabezado centrado
-  lines.push(centerText(config.restaurantName, width))
+  // Header - Restaurant name prominent
+  lines.push('')
+  lines.push(centerText(config.restaurantName.toUpperCase(), width))
   if (config.nit) lines.push(centerText(`NIT: ${config.nit}`, width))
   if (config.address) lines.push(centerText(config.address, width))
   if (config.phone) lines.push(centerText(`Tel: ${config.phone}`, width))
-  lines.push(doubleSeparator)
+  lines.push(thickLine)
 
-  // Info compacta
+  // Order info
   const dateStr = new Date(order.createdAt || Date.now()).toLocaleString('es-CO', {
     day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'America/Bogota'
   })
-  lines.push(leftRightText(`#${order.orderNumber}`, dateStr, width))
+  lines.push(leftRightText(`Orden: #${order.orderNumber}`, dateStr, width))
   if (order.tableName) {
     const waiterStr = order.waiterName ? `  ${order.waiterName}` : ''
     lines.push(`Mesa: ${order.tableName}${waiterStr}`)
   } else if (order.waiterName) {
     lines.push(`Atendido: ${order.waiterName}`)
   }
-  lines.push(separator)
+  lines.push(thinLine)
 
-  // Items - compactos en una sola línea
+  // Items header
+  lines.push(leftRightText('CANT  PRODUCTO', 'PRECIO', width))
+  lines.push(thinLine)
+
+  // Items
   order.items.forEach(item => {
     const qty = `${item.quantity}x`
     const price = formatPrice(item.quantity * item.unitPrice)
-    const maxName = width - qty.length - price.length - 2
+    const maxName = width - qty.length - price.length - 4
     const name = item.product.name.length > maxName
       ? item.product.name.substring(0, maxName)
       : item.product.name
-    lines.push(leftRightText(`${qty} ${name}`, price, width))
+    lines.push(leftRightText(`${qty}  ${name}`, price, width))
   })
 
-  lines.push(separator)
+  lines.push(thinLine)
 
-  // Totales compactos
+  // Totals
+  if (order.subtotal && order.subtotal !== order.total) {
+    lines.push(leftRightText('  Subtotal', formatPrice(order.subtotal), width))
+  }
   if (order.discount && order.discount > 0) {
-    lines.push(leftRightText('Subtotal', formatPrice(order.subtotal || 0), width))
-    lines.push(leftRightText('Descuento', `-${formatPrice(order.discount)}`, width))
+    lines.push(leftRightText('  Descuento', `-${formatPrice(order.discount)}`, width))
   }
-  lines.push(leftRightText('IVA', formatPrice(order.tax || 0), width))
+  if (order.tax && order.tax > 0) {
+    lines.push(leftRightText('  IVA', formatPrice(order.tax), width))
+  }
   if (order.tip && order.tip > 0) {
-    lines.push(leftRightText('Propina', formatPrice(order.tip), width))
+    lines.push(leftRightText('  Propina', formatPrice(order.tip), width))
   }
-  lines.push(doubleSeparator)
-  lines.push(leftRightText('TOTAL', formatPrice(order.total), width))
-  lines.push(doubleSeparator)
+  lines.push(thickLine)
+  lines.push(leftRightText('  TOTAL', formatPrice(order.total), width))
+  lines.push(thickLine)
 
-  // Pago
+  // Payment info
   if (order.paymentMethod) {
     const methodNames: Record<string, string> = {
       'cash': 'Efectivo', 'CASH': 'Efectivo',
@@ -204,6 +214,7 @@ export function generateInvoiceTicket(order: OrderData): string {
       'mixed': 'Mixto', 'SPLIT': 'Mixto'
     }
     const method = methodNames[order.paymentMethod] || order.paymentMethod
+    lines.push('')
     if ((order.paymentMethod === 'cash' || order.paymentMethod === 'CASH') && order.receivedAmount) {
       lines.push(leftRightText(`Pago: ${method}`, formatPrice(order.receivedAmount), width))
       lines.push(leftRightText('Cambio', formatPrice(order.changeAmount || 0), width))
@@ -212,6 +223,7 @@ export function generateInvoiceTicket(order: OrderData): string {
     }
   }
 
+  // Footer
   lines.push('')
   if (config.footer) {
     lines.push(centerText(config.footer, width))

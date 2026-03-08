@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import { cookies } from 'next/headers'
+import { getColombiaDateString } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,12 +11,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const date = searchParams.get('date')
     
-    const targetDate = date ? new Date(date) : new Date()
-    const startOfDay = new Date(targetDate)
-    startOfDay.setHours(0, 0, 0, 0)
-    
-    const endOfDay = new Date(targetDate)
-    endOfDay.setHours(23, 59, 59, 999)
+    // Use Colombia timezone (UTC-5) for date boundaries
+    const dateStr = date || getColombiaDateString()
+    const startOfDay = `${dateStr}T00:00:00-05:00`
+    const endOfDay = `${dateStr}T23:59:59.999-05:00`
 
     // Get orders for the day (any order that can be reprinted)
     const { data: orders, error: ordersError } = await supabase
@@ -30,8 +29,8 @@ export async function GET(request: Request) {
         table_id,
         waiter_id
       `)
-      .gte('created_at', startOfDay.toISOString())
-      .lte('created_at', endOfDay.toISOString())
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay)
       .neq('status', 'CANCELLED')
       .order('created_at', { ascending: false })
 
@@ -135,8 +134,8 @@ export async function GET(request: Request) {
           success,
           created_at
         `)
-        .gte('created_at', startOfDay.toISOString())
-        .lte('created_at', endOfDay.toISOString())
+        .gte('created_at', startOfDay)
+        .lte('created_at', endOfDay)
         .order('created_at', { ascending: false })
       
       if (!logsError) {

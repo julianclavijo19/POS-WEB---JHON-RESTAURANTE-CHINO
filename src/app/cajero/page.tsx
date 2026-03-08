@@ -9,7 +9,7 @@ import {
   CreditCard, Banknote, X, Printer, CheckCircle,
   Clock, TrendingUp, Wallet, AlertCircle, ArrowRight,
   Play, Square, Receipt, ChevronRight, AlertTriangle,
-  ShoppingBag, Truck, Edit2, RotateCcw
+  ShoppingBag, Truck, Edit2, RotateCcw, Coffee
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { printInvoice, type OrderData } from '@/lib/printer'
@@ -213,7 +213,7 @@ export default function CajeroPage() {
           takeaway_orders: 0, takeaway_total: 0 
         })
         
-        // Filter takeaway/delivery orders (orders without table_id)
+        // Filter non-table orders (Para Llevar, Delivery, Mostrador)
         const takeaway = (data.orders || []).filter((o: any) => 
           !o.table_id
         )
@@ -404,7 +404,7 @@ export default function CajeroPage() {
 
     const orderData: OrderData = {
       orderNumber: order.order_number,
-      tableName: selectedTable?.name || (selectedTakeawayOrder?.type === 'DELIVERY' ? 'Domicilio' : 'Para Llevar'),
+      tableName: selectedTable?.name || (selectedTakeawayOrder?.type === 'DELIVERY' ? 'Domicilio' : selectedTakeawayOrder?.type === 'COUNTER' ? 'Mostrador' : 'Para Llevar'),
       waiterName: selectedTable?.waiter?.name || selectedTakeawayOrder?.waiter?.name || '',
       createdAt: order.created_at,
       items: order.items?.map(item => ({
@@ -693,15 +693,59 @@ export default function CajeroPage() {
         </CardContent>
       </Card>
 
-      {/* Takeaway/Delivery Orders Section */}
-      {takeawayOrders.length > 0 && (
+      {/* Mostrador Orders Section */}
+      {takeawayOrders.filter(o => o.type === 'COUNTER').length > 0 && (
         <div>
-          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-2">
-            <ShoppingBag className="h-4 w-4" />
-            Para Llevar ({takeawayOrders.length})
+          <h2 className="text-sm font-medium text-amber-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+            <Coffee className="h-4 w-4 text-amber-600" />
+            Por Mostrador ({takeawayOrders.filter(o => o.type === 'COUNTER').length})
           </h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {takeawayOrders.map((order) => (
+            {takeawayOrders.filter(o => o.type === 'COUNTER').map((order) => (
+              <div
+                key={order.id}
+                onClick={() => setSelectedTakeawayOrder(order)}
+                className="cursor-pointer"
+              >
+                <Card className="transition-all hover:shadow-md ring-2 ring-amber-400">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-1 mb-2">
+                      <Coffee className="h-4 w-4 text-amber-600" />
+                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                        Mostrador
+                      </span>
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900">#{order.order_number}</h3>
+                    <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">{order.items?.length || 0} items</span>
+                        <span className="font-bold text-gray-900">{formatCurrency(order.total)}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-gray-400">
+                        <Timer className="h-3 w-3" />
+                        <span>{getTimeDifference(order.created_at)}</span>
+                      </div>
+                      <button className="w-full mt-2 py-1.5 bg-amber-500 text-white text-xs font-medium rounded-lg flex items-center justify-center gap-1 hover:bg-amber-600">
+                        Cobrar <ChevronRight className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Takeaway/Delivery Orders Section */}
+      {takeawayOrders.filter(o => o.type !== 'COUNTER').length > 0 && (
+        <div>
+          <h2 className="text-sm font-medium text-blue-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+            <ShoppingBag className="h-4 w-4 text-blue-600" />
+            Para Llevar ({takeawayOrders.filter(o => o.type !== 'COUNTER').length})
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            {takeawayOrders.filter(o => o.type !== 'COUNTER').map((order) => (
               <div
                 key={order.id}
                 onClick={() => setSelectedTakeawayOrder(order)}
@@ -719,15 +763,11 @@ export default function CajeroPage() {
                         {order.type === 'DELIVERY' ? 'Domicilio' : 'P/Llevar'}
                       </span>
                     </div>
-                    
                     <h3 className="text-lg font-semibold text-gray-900">#{order.order_number}</h3>
-
                     <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-gray-500">{order.items?.length || 0} items</span>
-                        <span className="font-bold text-gray-900">
-                          {formatCurrency(order.total)}
-                        </span>
+                        <span className="font-bold text-gray-900">{formatCurrency(order.total)}</span>
                       </div>
                       <div className="flex items-center gap-1 text-xs text-gray-400">
                         <Timer className="h-3 w-3" />
@@ -751,22 +791,7 @@ export default function CajeroPage() {
         Mesas
       </h2>
 
-      {/* Filters */}
-      <div className="flex gap-2">
-        {(['pending', 'all'] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              filter === f 
-                ? 'bg-gray-900 text-white' 
-                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            {f === 'pending' ? 'Por Cobrar' : 'Todas'}
-          </button>
-        ))}
-      </div>
+
 
       {filteredAreas.length === 0 ? (
         <Card>
@@ -1094,11 +1119,13 @@ export default function CajeroPage() {
                 <div className="flex items-center gap-2">
                   {selectedTakeawayOrder.type === 'DELIVERY' ? (
                     <Truck className="h-5 w-5 text-blue-600" />
+                  ) : selectedTakeawayOrder.type === 'COUNTER' ? (
+                    <Coffee className="h-5 w-5 text-amber-600" />
                   ) : (
                     <ShoppingBag className="h-5 w-5 text-blue-600" />
                   )}
                   <h2 className="text-xl font-semibold text-gray-900">
-                    {selectedTakeawayOrder.type === 'DELIVERY' ? 'Domicilio' : 'Para Llevar'}
+                    {selectedTakeawayOrder.type === 'DELIVERY' ? 'Domicilio' : selectedTakeawayOrder.type === 'COUNTER' ? 'Venta Mostrador' : 'Para Llevar'}
                   </h2>
                 </div>
                 <p className="text-sm text-gray-500">

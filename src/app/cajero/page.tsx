@@ -751,33 +751,21 @@ export default function CajeroPage() {
         Mesas
       </h2>
 
-      {/* Search and filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar mesa..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-          />
-        </div>
-        <div className="flex gap-2">
-          {(['pending', 'all'] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                filter === f 
-                  ? 'bg-gray-900 text-white' 
-                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              {f === 'pending' ? 'Por Cobrar' : 'Todas'}
-            </button>
-          ))}
-        </div>
+      {/* Filters */}
+      <div className="flex gap-2">
+        {(['pending', 'all'] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              filter === f 
+                ? 'bg-gray-900 text-white' 
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            {f === 'pending' ? 'Por Cobrar' : 'Todas'}
+          </button>
+        ))}
       </div>
 
       {filteredAreas.length === 0 ? (

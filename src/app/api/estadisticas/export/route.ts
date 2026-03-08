@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getColombiaDateString } from '@/lib/utils'
 import * as XLSX from 'xlsx'
 
 export const dynamic = 'force-dynamic'
@@ -28,7 +29,7 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url)
         const period = searchParams.get('period') || 'day'
-        const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
+        const date = searchParams.get('date') || getColombiaDateString()
 
         const parts = date.split('-').map(Number)
         const refYear = parts[0]

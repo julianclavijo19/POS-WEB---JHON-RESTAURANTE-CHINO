@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getColombiaDateString } from '@/lib/utils'
 import * as XLSX from 'xlsx'
 
 export const dynamic = 'force-dynamic'
@@ -289,7 +290,7 @@ export async function GET(request: Request) {
 
     // Generate buffer
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
-    const fileName = `reporte-produccion-${period}-${new Date().toISOString().split('T')[0]}.xlsx`
+    const fileName = `reporte-produccion-${period}-${getColombiaDateString()}.xlsx`
 
     return new NextResponse(buffer, {
       status: 200,

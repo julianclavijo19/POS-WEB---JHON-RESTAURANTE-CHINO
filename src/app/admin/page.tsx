@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { formatCurrency } from '@/lib/utils'
+import { useEffect, useState, useCallback, useRef } from 'react'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import {
   TrendingUp,
   ArrowRight,
@@ -26,6 +26,8 @@ export default function AdminDashboard() {
   const [period, setPeriod] = useState('today')
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+  const [animateChart, setAnimateChart] = useState(false)
+  const [hoveredBar, setHoveredBar] = useState<number | null>(null)
 
   const fetchStats = useCallback(async () => {
     setLoading(true)
@@ -33,6 +35,8 @@ export default function AdminDashboard() {
       const res = await fetch(`/api/dashboard?period=${period}`)
       const data = await res.json()
       setStats(data)
+      setAnimateChart(false)
+      setTimeout(() => setAnimateChart(true), 50)
     } catch (error) {
       console.error('Error fetching stats:', error)
     } finally {
@@ -53,7 +57,7 @@ export default function AdminDashboard() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `reporte-produccion-${period}-${new Date().toISOString().split('T')[0]}.xlsx`
+      a.download = `reporte-produccion-${period}-${getColombiaDateString()}.xlsx`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -75,7 +79,6 @@ export default function AdminDashboard() {
   }
 
   const ticketPromedio = stats?.totalPaidOrders ? stats.totalSales / stats.totalPaidOrders : 0
-  const maxDailySale = Math.max(...(stats?.dailySales?.map(d => d.total) || [0]), 1)
 
   return (
     <div className="space-y-8">
@@ -163,37 +166,83 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Ventas Diarias */}
+        {/* Estadísticas - gráfica de barras */}
         <div className="bg-white border border-gray-200 rounded-lg">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="font-semibold text-gray-900">Ventas Diarias</h2>
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900">Estadísticas</h2>
+            <Link href="/admin/estadisticas" className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1">
+              Ver más <ArrowRight className="h-3 w-3" />
+            </Link>
           </div>
-          <div className="p-6">
-            <div className="space-y-3">
-              {stats?.dailySales && stats.dailySales.length > 1 ? (
-                stats.dailySales.slice(-7).map((day, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <span className="text-xs text-gray-500 w-14">{day.date}</span>
-                    <div className="flex-1 bg-gray-100 rounded-full h-2">
-                      <div
-                        className="bg-gray-900 rounded-full h-2 transition-all"
-                        style={{ width: `${(day.total / maxDailySale) * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-sm font-medium text-gray-900 w-24 text-right">
-                      {formatCurrency(day.total)}
-                    </span>
+          <div className="p-4">
+            {(() => {
+              const chartData = (stats?.dailySales || []).filter(d => d.total > 0 || period === 'today')
+              const allData = stats?.dailySales || []
+              const maxVal = Math.max(...allData.map(d => d.total), 1)
+              const showEveryNth = allData.length > 20 ? Math.ceil(allData.length / 10) : allData.length > 12 ? 2 : 1
+              const chartHeight = 160
+              const barAreaHeight = chartHeight - 30 // bottom label space
+
+              return (
+                <div>
+                  {/* Total */}
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs text-gray-500">Total del período</span>
+                    <span className="text-sm font-semibold text-gray-900">{formatCurrency(stats?.totalSales || 0)}</span>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-4">
-                  <p className="text-2xl font-semibold text-gray-900">
-                    {formatCurrency(stats?.totalSales || 0)}
-                  </p>
-                  <p className="text-sm text-gray-500 mt-1">Ventas del día</p>
+                  {/* Chart */}
+                  <div className="relative" style={{ height: chartHeight }}>
+                    {/* Guide lines */}
+                    <svg className="absolute inset-0 w-full h-full" viewBox={`0 0 100 ${chartHeight}`} preserveAspectRatio="none">
+                      {[0.25, 0.5, 0.75, 1].map((frac, i) => {
+                        const y = (chartHeight - 30) * (1 - frac)
+                        return <line key={i} x1="0" y1={y} x2="100" y2={y} stroke="#f3f4f6" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
+                      })}
+                    </svg>
+                    {/* Bars */}
+                    <div className="absolute inset-0 flex items-end pb-7 gap-px">
+                      {allData.map((point, index) => {
+                        const pct = maxVal > 0 ? (point.total / maxVal) * 100 : 0
+                        const isHovered = hoveredBar === index
+                        return (
+                          <div
+                            key={index}
+                            className="flex-1 flex flex-col items-center relative"
+                            style={{ height: '100%' }}
+                            onMouseEnter={() => setHoveredBar(index)}
+                            onMouseLeave={() => setHoveredBar(null)}
+                          >
+                            {/* Tooltip */}
+                            {isHovered && point.total > 0 && (
+                              <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] rounded px-2 py-1 whitespace-nowrap z-20 pointer-events-none">
+                                {formatCurrency(point.total)}
+                              </div>
+                            )}
+                            {/* Bar */}
+                            <div className="w-full flex items-end" style={{ height: `${barAreaHeight}px` }}>
+                              <div
+                                className="w-full rounded-t-sm transition-all duration-500"
+                                style={{
+                                  height: animateChart ? `${Math.max(pct, point.total > 0 ? 2 : 0)}%` : '0%',
+                                  transitionDelay: `${index * 12}ms`,
+                                  backgroundColor: isHovered ? '#111827' : point.total > 0 ? '#374151' : '#f3f4f6',
+                                }}
+                              />
+                            </div>
+                            {/* Label */}
+                            {index % showEveryNth === 0 && (
+                              <span className="absolute bottom-0 text-[9px] text-gray-400 truncate" style={{ maxWidth: '100%' }}>
+                                {point.date}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+              )
+            })()}
           </div>
         </div>
 

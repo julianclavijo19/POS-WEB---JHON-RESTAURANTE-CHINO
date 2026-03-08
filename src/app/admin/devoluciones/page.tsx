@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
-import { formatCurrency, formatMiles, parseMiles } from '@/lib/utils'
+import { formatCurrency, formatMiles, parseMiles, getColombiaDateString } from '@/lib/utils'
 import {
   Search, Calendar, RefreshCw, RotateCcw, Clock,
   CheckCircle, XCircle, AlertTriangle, DollarSign, Banknote
@@ -47,7 +47,7 @@ export default function DevolucionesPage() {
   const [refunds, setRefunds] = useState<Refund[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
+  const [dateFilter, setDateFilter] = useState(getColombiaDateString())
   const [activeTab, setActiveTab] = useState<'new' | 'history'>('new')
 
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)

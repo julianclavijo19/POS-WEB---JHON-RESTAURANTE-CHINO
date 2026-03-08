@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getColombiaDateString } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -7,10 +8,10 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const date = searchParams.get('date') || new Date().toISOString().split('T')[0]
+    const date = searchParams.get('date') || getColombiaDateString()
 
-    const startOfDay = date + 'T00:00:00'
-    const endOfDay = date + 'T23:59:59.999'
+    const startOfDay = date + 'T00:00:00-05:00'
+    const endOfDay = date + 'T23:59:59.999-05:00'
 
     // Obtener pagos del día
     const { data: payments, error } = await supabase

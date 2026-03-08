@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { createBrowserClient } from '@/lib/supabase'
 import { FileText, Search, Download, Clock, User, RefreshCw } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 
 interface AuditLog {
   id: string
@@ -406,7 +406,7 @@ export default function AuditPage() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = `auditoria_${new Date().toISOString().split('T')[0]}.csv`
+    link.download = `auditoria_${getColombiaDateString()}.csv`
     link.click()
   }
 

@@ -1,16 +1,14 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getColombiaDateString } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
     // Colombia timezone UTC-5
-    const now = new Date()
-    const colombiaOffset = now.getTime() + (now.getTimezoneOffset() * 60000) - (5 * 3600000)
-    const colombiaDate = new Date(colombiaOffset)
-    const todayStr = colombiaDate.toISOString().split('T')[0]
-    const todayISO = todayStr + 'T05:00:00.000Z' // Midnight Colombia = 5AM UTC
+    const todayStr = getColombiaDateString()
+    const todayISO = todayStr + 'T00:00:00-05:00'
 
     // Obtener todas las órdenes pagadas de hoy
     const { data: orders } = await supabase
@@ -83,7 +81,7 @@ export async function GET() {
     return new NextResponse(blob, {
       status: 200,
       headers: {
-        'Content-Disposition': `attachment; filename="reporte-ventas-${new Date().toISOString().split('T')[0]}.csv"`,
+        'Content-Disposition': `attachment; filename="reporte-ventas-${todayStr}.csv"`,    
         'Content-Type': 'text/csv;charset=utf-8;',
       },
     })

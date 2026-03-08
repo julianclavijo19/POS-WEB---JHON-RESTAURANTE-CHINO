@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { DollarSign, ShoppingCart, CreditCard, TrendingUp, Calendar, BarChart3, Download, RefreshCw, Utensils } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -71,7 +71,7 @@ export default function AdminCajaPage() {
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `reporte-caja-restaurante-${new Date().toISOString().split('T')[0]}.csv`
+        a.download = `reporte-caja-restaurante-${getColombiaDateString()}.csv`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)

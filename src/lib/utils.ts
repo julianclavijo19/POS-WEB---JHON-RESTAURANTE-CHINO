@@ -62,6 +62,17 @@ export function getTimeDifference(startDate: Date | string): string {
   return `${hours}h ${mins}m`
 }
 
+// Obtener fecha actual en Colombia (UTC-5) como string YYYY-MM-DD
+// Evita que después de las 7PM Colombia, toISOString() devuelva el día siguiente
+export function getColombiaDateString(): string {
+  const now = new Date()
+  const colombiaDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/Bogota' }))
+  const year = colombiaDate.getFullYear()
+  const month = (colombiaDate.getMonth() + 1).toString().padStart(2, '0')
+  const day = colombiaDate.getDate().toString().padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function formatMiles(value: number | string): string {
   const str = typeof value === 'string' ? parseMiles(value) : value.toString()
   const num = parseInt(str, 10)

@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, CreditCard, Receipt, Percent,
   Clock, BarChart3, Wallet, RotateCcw, Printer, UserCheck,
-  Search, LogOut, Menu, X, ChevronDown, TrendingUp, Utensils, Zap, ShoppingBag, ClipboardList
+  Search, LogOut, Menu, X, ChevronDown, TrendingUp, Utensils, Zap, ShoppingBag, ClipboardList, Coffee
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -23,6 +23,7 @@ const menuSections = [
     items: [
       { href: '/cajero/tomar-pedido', label: 'Tomar Pedido Mesa', icon: ClipboardList },
       { href: '/cajero/para-llevar', label: 'Pedidos Para Llevar', icon: ShoppingBag },
+      { href: '/cajero/mostrador', label: 'Ventas Mostrador', icon: Coffee },
     ]
   },
   {

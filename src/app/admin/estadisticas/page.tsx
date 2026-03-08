@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import {
 	Calendar, RefreshCw, BarChart3, TrendingUp, Receipt, Hash,
 	ArrowUpRight, ArrowDownRight, Download
@@ -167,7 +167,7 @@ function KPICard({
 
 export default function EstadisticasPage() {
 	const [period, setPeriod] = useState<Period>('day')
-	const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+	const [selectedDate, setSelectedDate] = useState(getColombiaDateString())
 	const [sales, setSales] = useState<SalesPoint[]>([])
 	const [summary, setSummary] = useState<SalesSummary>({ total: 0, count: 0, avgTicket: 0, maxSale: 0, minSale: 0 })
 	const [loading, setLoading] = useState(true)

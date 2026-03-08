@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getColombiaDateString } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,20 +9,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const date = searchParams.get('date')
     
-    console.log('=== REPORTES API DEBUG ===')
-    console.log('Date parameter:', date)
-    
-    // Default to today if no date provided
-    const targetDate = date ? new Date(date + 'T00:00:00') : new Date()
-    const startOfDay = new Date(targetDate)
-    startOfDay.setHours(0, 0, 0, 0)
-    
-    const endOfDay = new Date(targetDate)
-    endOfDay.setHours(23, 59, 59, 999)
-    
-    console.log('Target date:', targetDate)
-    console.log('Start of day:', startOfDay.toISOString())
-    console.log('End of day:', endOfDay.toISOString())
+    // Default to today in Colombia timezone if no date provided
+    const dateStr = date || getColombiaDateString()
+    const startOfDay = `${dateStr}T00:00:00-05:00`
+    const endOfDay = `${dateStr}T23:59:59.999-05:00`
 
     // Get all completed/paid orders for the day with related data
     const { data: orders, error } = await supabase
@@ -36,18 +27,35 @@ export async function GET(request: Request) {
         table_id
       `)
       .in('status', ['PAID', 'DELIVERED'])
-      .gte('created_at', startOfDay.toISOString())
-      .lte('created_at', endOfDay.toISOString())
+      .gte('created_at', startOfDay)
+      .lte('created_at', endOfDay)
 
     if (error) throw error
 
-    // DEBUG: Log para ver los pedidos encontrados
-    console.log('=== REPORTES DEBUG ===')
-    console.log('Fecha buscada:', targetDate.toISOString().split('T')[0])
-    console.log('Desde:', startOfDay.toISOString())
-    console.log('Hasta:', endOfDay.toISOString())
-    console.log('Pedidos encontrados:', orders?.length || 0)
-    console.log('Pedidos:', JSON.stringify(orders, null, 2))
+    // Get payments for the same period (source of truth for totals, matching estadisticas)
+    let allPayments: any[] = []
+    let payFrom = 0
+    const payPageSize = 1000
+    let payHasMore = true
+    while (payHasMore) {
+      const { data: payBatch, error: payError } = await supabase
+        .from('payments')
+        .select('id, amount, method, created_at')
+        .gte('created_at', startOfDay)
+        .lte('created_at', endOfDay)
+        .order('created_at', { ascending: true })
+        .range(payFrom, payFrom + payPageSize - 1)
+      if (payError) throw payError
+      const batch = payBatch || []
+      allPayments = allPayments.concat(batch)
+      payHasMore = batch.length === payPageSize
+      payFrom += payPageSize
+    }
+
+    const totalFromPayments = allPayments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0)
+    const cashFromPayments = allPayments.filter((p: any) => p.method === 'CASH').reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0)
+    const cardFromPayments = allPayments.filter((p: any) => p.method === 'CARD').reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0)
+    const transferFromPayments = allPayments.filter((p: any) => p.method === 'TRANSFER').reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0)
 
     // Get waiters
     const { data: users } = await supabase
@@ -210,7 +218,13 @@ export async function GET(request: Request) {
       waiters: waitersReport,
       areas: areasReport,
       products: productsReport,
-      hourly
+      hourly,
+      totalFromPayments: Math.round(totalFromPayments),
+      salesByMethod: {
+        cash: Math.round(cashFromPayments),
+        card: Math.round(cardFromPayments),
+        transfer: Math.round(transferFromPayments),
+      },
     })
 
   } catch (error) {

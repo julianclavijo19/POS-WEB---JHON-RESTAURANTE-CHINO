@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { 
   Search, Calendar, RefreshCw, ClipboardList, 
   Clock, User, MapPin, Eye, ChefHat, CheckCircle2
@@ -31,7 +31,7 @@ export default function PedidosPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
+  const [dateFilter, setDateFilter] = useState(getColombiaDateString())
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
 

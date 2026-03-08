@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createBrowserClient } from '@/lib/supabase'
+import { getColombiaDateString } from '@/lib/utils'
 import { 
   Calendar,
   Download,
@@ -63,7 +64,7 @@ export default function AdminHistoryPage() {
 
   // Establecer fecha de hoy por defecto
   useEffect(() => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getColombiaDateString()
     setStartDate(today)
     setEndDate(today)
   }, [])
@@ -74,10 +75,8 @@ export default function AdminHistoryPage() {
     try {
       setLoading(true)
       
-      const start = new Date(startDate)
-      start.setHours(0, 0, 0, 0)
-      const end = new Date(endDate)
-      end.setHours(23, 59, 59, 999)
+      const startISO = `${startDate}T00:00:00-05:00`
+      const endISO = `${endDate}T23:59:59.999-05:00`
 
       let query = supabase
         .from('orders')
@@ -91,8 +90,8 @@ export default function AdminHistoryPage() {
             product:products(name, price)
           )
         `)
-        .gte('created_at', start.toISOString())
-        .lte('created_at', end.toISOString())
+        .gte('created_at', startISO)
+        .lte('created_at', endISO)
         .order('created_at', { ascending: false })
 
       if (statusFilter !== 'ALL') {
@@ -205,32 +204,42 @@ export default function AdminHistoryPage() {
 
   // Quick date filters
   const setToday = () => {
-    const today = new Date().toISOString().split('T')[0]
+    const today = getColombiaDateString()
     setStartDate(today)
     setEndDate(today)
   }
 
   const setYesterday = () => {
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const date = yesterday.toISOString().split('T')[0]
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }))
+    now.setDate(now.getDate() - 1)
+    const y = now.getFullYear()
+    const m = (now.getMonth() + 1).toString().padStart(2, '0')
+    const d = now.getDate().toString().padStart(2, '0')
+    const date = `${y}-${m}-${d}`
     setStartDate(date)
     setEndDate(date)
   }
 
   const setThisWeek = () => {
-    const today = new Date()
-    const startOfWeek = new Date(today)
-    startOfWeek.setDate(today.getDate() - today.getDay())
-    setStartDate(startOfWeek.toISOString().split('T')[0])
-    setEndDate(today.toISOString().split('T')[0])
+    const today = getColombiaDateString()
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }))
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay())
+    const y = startOfWeek.getFullYear()
+    const m = (startOfWeek.getMonth() + 1).toString().padStart(2, '0')
+    const d = startOfWeek.getDate().toString().padStart(2, '0')
+    setStartDate(`${y}-${m}-${d}`)
+    setEndDate(today)
   }
 
   const setThisMonth = () => {
-    const today = new Date()
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
-    setStartDate(startOfMonth.toISOString().split('T')[0])
-    setEndDate(today.toISOString().split('T')[0])
+    const today = getColombiaDateString()
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }))
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const y = startOfMonth.getFullYear()
+    const m = (startOfMonth.getMonth() + 1).toString().padStart(2, '0')
+    setStartDate(`${y}-${m}-01`)
+    setEndDate(today)
   }
 
   return (

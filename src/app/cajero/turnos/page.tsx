@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { 
   Clock, DollarSign, LogIn, LogOut, RefreshCw, Users, AlertCircle
 } from 'lucide-react'
@@ -59,7 +59,7 @@ export default function TurnosPage() {
       }
 
       // Fetch recent closed shifts
-      const historyRes = await fetch('/api/cajero/historial-caja?from=' + new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+      const historyRes = await fetch('/api/cajero/historial-caja?from=' + new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }))
       if (historyRes.ok) {
         const historyData = await historyRes.json()
         const closedShifts = (historyData.registers || [])

@@ -60,19 +60,31 @@ export async function GET(request: Request) {
     const startDateISO = startDate.toISOString()
     const endDateISO = endDate.toISOString()
 
-    // Obtener pagos del periodo (filtro por fecha en query para evitar límite 1000)
-    const { data: payments, error: paymentsError } = await supabase
-      .from('payments')
-      .select('id, amount, method, created_at, order_id')
-      .gte('created_at', startDateISO)
-      .lte('created_at', endDateISO)
-      .order('created_at', { ascending: false })
+    // Obtener pagos del periodo con paginación (evitar límite de 1000)
+    let paymentsList: any[] = []
+    let payFrom = 0
+    const payPageSize = 1000
+    let payHasMore = true
 
-    if (paymentsError) {
-      console.error('Payments Error:', paymentsError)
+    while (payHasMore) {
+      const { data: payBatch, error: payError } = await supabase
+        .from('payments')
+        .select('id, amount, method, created_at, order_id')
+        .gte('created_at', startDateISO)
+        .lte('created_at', endDateISO)
+        .order('created_at', { ascending: true })
+        .range(payFrom, payFrom + payPageSize - 1)
+
+      if (payError) {
+        console.error('Payments Error:', payError)
+        break
+      }
+
+      const batch = payBatch || []
+      paymentsList = paymentsList.concat(batch)
+      payHasMore = batch.length === payPageSize
+      payFrom += payPageSize
     }
-
-    const paymentsList = payments || []
 
     // Calcular ventas desde pagos (incluye refunds negativos)
     const totalSalesFromPayments = paymentsList.reduce((sum, p) => sum + Number(p.amount || 0), 0)
@@ -81,15 +93,14 @@ export async function GET(request: Request) {
     const transferSales = paymentsList.filter(p => p.method === 'TRANSFER').reduce((sum, p) => sum + Number(p.amount || 0), 0)
     const totalPaidOrders = paymentsList.filter(p => Number(p.amount || 0) > 0).length
 
-    // Obtener órdenes del periodo
+    // Obtener órdenes del periodo (filtro en servidor)
     const { data: allOrdersRaw } = await supabase
       .from('orders')
       .select('id, status, total, paid_at, created_at')
+      .gte('created_at', startDateISO)
+      .lte('created_at', endDateISO)
     
-    const allOrders = allOrdersRaw?.filter(o => {
-      const oDate = new Date(o.created_at)
-      return oDate >= startDate && oDate <= endDate
-    }) || []
+    const allOrders = allOrdersRaw || []
 
     // Usar ventas de pagos como fuente de verdad
     const totalSales = totalSalesFromPayments
@@ -122,27 +133,43 @@ export async function GET(request: Request) {
           total: monthTotal
         })
       }
+    } else if (period === 'today') {
+      // Para hoy: agrupar por hora (0-23) en timezone Colombia
+      for (let h = 0; h < 24; h++) {
+        const hourStartUTC = new Date(Date.UTC(todayYear, todayMonth, todayDay, COLOMBIA_OFFSET_HOURS + h, 0, 0, 0))
+        const hourEndUTC = new Date(Date.UTC(todayYear, todayMonth, todayDay, COLOMBIA_OFFSET_HOURS + h, 59, 59, 999))
+
+        const hourPayments = paymentsList.filter(p => {
+          const pDate = new Date(p.created_at)
+          return pDate >= hourStartUTC && pDate <= hourEndUTC
+        })
+
+        const hourTotal = hourPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        dailySales.push({
+          date: `${String(h).padStart(2, '0')}:00`,
+          total: hourTotal
+        })
+      }
     } else {
-      const daysToShow = period === 'month' ? 30 : period === 'week' ? 7 : 1
-      
+      const daysToShow = period === 'month' ? 30 : 7
+
       for (let i = daysToShow - 1; i >= 0; i--) {
         const targetDate = new Date(Date.UTC(todayYear, todayMonth, todayDay - i))
         const targetYear = targetDate.getUTCFullYear()
         const targetMonth = targetDate.getUTCMonth()
         const targetDay = targetDate.getUTCDate()
-        
+
         const dayStartUTC = new Date(Date.UTC(targetYear, targetMonth, targetDay, COLOMBIA_OFFSET_HOURS, 0, 0, 0))
         const dayEndUTC = new Date(Date.UTC(targetYear, targetMonth, targetDay + 1, COLOMBIA_OFFSET_HOURS - 1, 59, 59, 999))
-        
+
         const dayPayments = paymentsList.filter(p => {
           const pDate = new Date(p.created_at)
           return pDate >= dayStartUTC && pDate <= dayEndUTC
         })
-        
+
         const dayTotal = dayPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
-        
-        // Formatear la fecha para mostrar (en Colombia)
-        const displayDate = new Date(Date.UTC(targetYear, targetMonth, targetDay, 12, 0, 0)) // mediodía para evitar issues
+
+        const displayDate = new Date(Date.UTC(targetYear, targetMonth, targetDay, 12, 0, 0))
         dailySales.push({
           date: displayDate.toLocaleDateString('es-CO', { weekday: 'short', day: '2-digit', timeZone: 'America/Bogota' }),
           total: dayTotal

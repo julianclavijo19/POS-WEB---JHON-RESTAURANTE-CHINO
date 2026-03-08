@@ -240,7 +240,6 @@ export default function SettingsPage() {
             { id: 'payments', label: 'Métodos de Pago', icon: CreditCard },
             { id: 'printers', label: 'Impresoras', icon: Printer },
             { id: 'hours', label: 'Horarios', icon: Clock },
-            { id: 'sql', label: 'SQL Editor', icon: Database },
           ] as const).map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
@@ -548,115 +547,6 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* SQL Editor Tab */}
-      {activeTab === 'sql' && (
-        <div className="space-y-4">
-          <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-                <Terminal className="h-5 w-5 text-gray-600" />
-                Editor SQL
-              </h2>
-              <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">Supabase</span>
-            </div>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
-                <div className="text-xs text-yellow-700">
-                  <p className="font-medium">Las consultas se ejecutan directamente en la base de datos.</p>
-                  <p className="mt-1">USE SELECT para consultar. INSERT/UPDATE/DELETE se aplican inmediatamente.</p>
-                </div>
-              </div>
-            </div>
-            <div className="relative">
-              <textarea value={sqlQuery} onChange={(e) => setSqlQuery(e.target.value)}
-                placeholder="SELECT * FROM settings ORDER BY key;"
-                rows={6}
-                className="w-full px-4 py-3 bg-gray-900 text-green-400 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-gray-500 placeholder-gray-600 resize-y"
-                onKeyDown={(e) => { if (e.ctrlKey && e.key === 'Enter') handleRunSQL() }} />
-              <div className="absolute bottom-3 right-3 text-xs text-gray-500">Ctrl+Enter para ejecutar</div>
-            </div>
-            <div className="flex items-center gap-3">
-              <button onClick={handleRunSQL} disabled={runningSql || !sqlQuery.trim()}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 disabled:opacity-50 transition-colors">
-                <Play className="h-4 w-4" /> {runningSql ? 'Ejecutando...' : 'Ejecutar'}
-              </button>
-              <select value="" onChange={(e) => { if (e.target.value) setSqlQuery(e.target.value) }}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-900">
-                <option value="">Consultas rápidas...</option>
-                <option value="SELECT * FROM settings ORDER BY key;">Ver configuración</option>
-                <option value="SELECT id, name, email, role, is_active FROM users ORDER BY name;">Ver usuarios</option>
-                <option value="SELECT id, name, category_id, price, is_available FROM products ORDER BY name;">Ver productos</option>
-                <option value="SELECT id, name, description, is_active FROM categories ORDER BY display_order;">Ver categorías</option>
-                <option value="SELECT id, order_number, total, status, created_at FROM orders ORDER BY created_at DESC LIMIT 20;">Últimas órdenes</option>
-                <option value="SELECT id, amount, method, status, created_at FROM payments ORDER BY created_at DESC LIMIT 20;">Últimos pagos</option>
-                <option value="SELECT * FROM tables ORDER BY name;">Ver mesas</option>
-                <option value={`SELECT column_name, data_type, table_name FROM information_schema.columns WHERE table_schema = 'public' ORDER BY table_name, ordinal_position;`}>Estructura de tablas</option>
-              </select>
-            </div>
-          </div>
-
-          {sqlError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-red-800">Error</p>
-                  <p className="text-sm text-red-700 mt-1 font-mono">{sqlError}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {sqlResult && (
-            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                  <span className="text-sm font-medium text-gray-700">{sqlResult.message || `${sqlResult.data?.length || 0} registros`}</span>
-                </div>
-              </div>
-              {sqlResult.data && sqlResult.data.length > 0 && (
-                <div className="overflow-x-auto max-h-96">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        {Object.keys(sqlResult.data[0]).map(col => (
-                          <th key={col} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b whitespace-nowrap">{col}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {sqlResult.data.map((row: any, i: number) => (
-                        <tr key={i} className="hover:bg-gray-50">
-                          {Object.values(row).map((val: any, j: number) => (
-                            <td key={j} className="px-4 py-2 text-gray-700 whitespace-nowrap max-w-xs truncate font-mono text-xs">
-                              {val === null ? <span className="text-gray-400 italic">NULL</span> : String(val)}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {sqlHistory.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Historial</h3>
-              <div className="space-y-2">
-                {sqlHistory.slice(0, 5).map((q, i) => (
-                  <button key={i} onClick={() => setSqlQuery(q)}
-                    className="w-full text-left px-3 py-2 text-xs font-mono text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 truncate transition-colors">{q}</button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 

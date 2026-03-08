@@ -11,6 +11,7 @@ import {
   X,
   Search,
   ShoppingBag,
+  Coffee,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -24,6 +25,7 @@ interface User {
 const menuItems = [
   { href: '/mesero', label: 'Mesas', icon: LayoutDashboard },
   { href: '/mesero/para-llevar', label: 'Para Llevar', icon: ShoppingBag },
+  { href: '/mesero/mostrador', label: 'Mostrador', icon: Coffee },
   { href: '/mesero/mis-comandas', label: 'Mis Comandas', icon: ClipboardList },
   { href: '/mesero/buscar', label: 'Buscar', icon: Search },
 ]

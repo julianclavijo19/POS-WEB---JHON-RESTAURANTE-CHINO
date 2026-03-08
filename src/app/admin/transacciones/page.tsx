@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { 
   Search, Calendar, CreditCard, Banknote, 
   DollarSign, RefreshCw, Receipt, FileText
@@ -26,7 +26,7 @@ export default function TransaccionesPage() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
+  const [dateFilter, setDateFilter] = useState(getColombiaDateString())
   const [methodFilter, setMethodFilter] = useState('all')
 
   const [stats, setStats] = useState({

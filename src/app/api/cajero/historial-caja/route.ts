@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getColombiaDateString } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,11 +11,11 @@ export async function GET(request: Request) {
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    // Use UTC boundaries for the date range
-    const fromStr = from || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    const toStr = to || new Date().toISOString().split('T')[0]
-    const startDate = `${fromStr}T00:00:00.000Z`
-    const endDate = `${toStr}T23:59:59.999Z`
+    // Use Colombia timezone (UTC-5) boundaries
+    const fromStr = from || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
+    const toStr = to || getColombiaDateString()
+    const startDate = `${fromStr}T00:00:00-05:00`
+    const endDate = `${toStr}T23:59:59.999-05:00`
 
     // Obtener cierres de caja del período
     const { data: registers, error } = await supabase

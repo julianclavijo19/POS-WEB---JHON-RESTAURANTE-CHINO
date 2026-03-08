@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { 
   Calendar, RefreshCw, Receipt, Banknote, CreditCard, 
   ArrowLeftRight, Clock, MapPin
@@ -32,7 +32,7 @@ interface DailySummary {
 export default function VentasDiariasPage() {
   const [payments, setPayments] = useState<Payment[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [selectedDate, setSelectedDate] = useState(getColombiaDateString())
   const [summary, setSummary] = useState<DailySummary>({ total: 0, cash: 0, card: 0, transfer: 0, count: 0 })
 
   const fetchPayments = useCallback(async () => {

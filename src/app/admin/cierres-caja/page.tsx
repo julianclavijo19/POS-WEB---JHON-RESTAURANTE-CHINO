@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { Calendar, RefreshCw, Wallet } from 'lucide-react'
 
 interface CashRegister {
@@ -29,9 +29,9 @@ export default function CierresCajaPage() {
   const [dateFrom, setDateFrom] = useState(() => {
     const date = new Date()
     date.setDate(1) // Primer día del mes
-    return date.toISOString().split('T')[0]
+    return date.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
   })
-  const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0])
+  const [dateTo, setDateTo] = useState(getColombiaDateString())
 
   const fetchRegisters = useCallback(async () => {
     setLoading(true)

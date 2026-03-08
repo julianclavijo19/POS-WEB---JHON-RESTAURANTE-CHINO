@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { 
   Search, Calendar, Printer, RefreshCw, Receipt,
   FileText, CheckCircle, XCircle, Clock
@@ -50,7 +50,7 @@ export default function ReimpresionesPage() {
   const [printLogs, setPrintLogs] = useState<PrintLog[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
+  const [dateFilter, setDateFilter] = useState(getColombiaDateString())
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [printing, setPrinting] = useState(false)
   const [activeTab, setActiveTab] = useState<'orders' | 'history'>('orders')

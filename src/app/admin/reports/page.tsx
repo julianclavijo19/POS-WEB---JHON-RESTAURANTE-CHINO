@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { createBrowserClient } from '@/lib/supabase'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { 
   Download, 
   TrendingUp, 
@@ -147,7 +147,7 @@ export default function ReportsPage() {
       // Calculate daily sales
       const dailyMap: { [key: string]: { total: number; orders: number } } = {}
       paidOrders.forEach(order => {
-        const date = new Date(order.created_at).toISOString().split('T')[0]
+        const date = new Date(order.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })
         if (!dailyMap[date]) {
           dailyMap[date] = { total: 0, orders: 0 }
         }
@@ -282,7 +282,7 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `reporte-ventas-${start.toISOString().split('T')[0]}-${end.toISOString().split('T')[0]}.csv`
+    a.download = `reporte-ventas-${startDate}-${endDate}.csv`
     a.click()
   }
 

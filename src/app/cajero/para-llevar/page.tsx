@@ -345,27 +345,36 @@ export default function ParaLlevarPage() {
           )}
 
           {/* Products list */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
-            {filteredProducts.map((product) => (
-              <Card
-                key={product.id}
-                className="cursor-pointer hover:shadow-md transition-all active:scale-98"
-                onClick={() => addToCart(product)}
-              >
-                <CardContent className="p-4">
-                  <h3 className="font-medium text-gray-900 text-sm line-clamp-2">{product.name}</h3>
-                  <p className="text-gray-900 font-semibold mt-2">
-                    {formatCurrency(product.price)}
-                  </p>
-                  {product.prepTime && (
-                    <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
-                      <Clock className="h-3 w-3" />
-                      {product.prepTime} min
-                    </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto pt-3 px-1 pb-1">
+            {filteredProducts.map((product) => {
+              const cartItem = cart.find(item => item.product.id === product.id)
+              const qty = cartItem ? cartItem.quantity : 0
+              return (
+                <Card
+                  key={product.id}
+                  className={`cursor-pointer hover:shadow-md transition-all active:scale-98 relative ${qty > 0 ? 'ring-2 ring-gray-900 bg-gray-50' : ''}`}
+                  onClick={() => addToCart(product)}
+                >
+                  {qty > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-gray-900 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center z-10">
+                      {qty}
+                    </span>
                   )}
-                </CardContent>
-              </Card>
-            ))}
+                  <CardContent className="p-4">
+                    <h3 className="font-medium text-gray-900 text-sm line-clamp-2">{product.name}</h3>
+                    <p className="text-gray-900 font-semibold mt-2">
+                      {formatCurrency(product.price)}
+                    </p>
+                    {product.prepTime && (
+                      <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
+                        <Clock className="h-3 w-3" />
+                        {product.prepTime} min
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
 
           {filteredProducts.length === 0 && (

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { getColombiaDateString } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,11 +9,10 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const date = searchParams.get('date')
     
-    // Use UTC boundaries for the date range
-    // When user asks for 2026-02-13, search from 2026-02-13 00:00:00Z to 2026-02-14 00:00:00Z
-    const dateStr = date || new Date().toISOString().split('T')[0]
-    const startOfDay = `${dateStr}T00:00:00.000Z`
-    const endOfDay = `${dateStr}T23:59:59.999Z`
+    // Use Colombia timezone (UTC-5) boundaries
+    const dateStr = date || getColombiaDateString()
+    const startOfDay = `${dateStr}T00:00:00-05:00`
+    const endOfDay = `${dateStr}T23:59:59.999-05:00`
     
     console.log('=== HISTORIAL DEBUG ===')
     console.log('Date:', dateStr)

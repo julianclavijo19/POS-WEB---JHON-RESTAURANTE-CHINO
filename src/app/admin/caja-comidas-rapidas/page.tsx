@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { 
   DollarSign, TrendingUp, Calendar, RefreshCw, 
   Clock, Wallet, CheckCircle, AlertCircle
@@ -52,7 +52,7 @@ export default function AdminComidasRapidasPage() {
       else startDate.setFullYear(startDate.getFullYear() - 1)
 
       const historyRes = await fetch(
-        `/api/cajero/historial-caja?from=${startDate.toISOString().split('T')[0]}&to=${endDate.toISOString().split('T')[0]}`
+        `/api/cajero/historial-caja?from=${startDate.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })}&to=${endDate.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' })}`
       )
       if (historyRes.ok) {
         const data = await historyRes.json()

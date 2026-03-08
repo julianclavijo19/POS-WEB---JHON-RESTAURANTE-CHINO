@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { 
   Users, MapPin, ShoppingBag, Clock,
   RefreshCw, Calendar, TrendingUp, Award
@@ -42,12 +42,13 @@ interface HourlyReport {
 export default function ReportesPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('meseros')
   const [loading, setLoading] = useState(true)
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
+  const [dateFilter, setDateFilter] = useState(getColombiaDateString())
   
   const [waitersReport, setWaitersReport] = useState<WaiterReport[]>([])
   const [areasReport, setAreasReport] = useState<AreaReport[]>([])
   const [productsReport, setProductsReport] = useState<ProductReport[]>([])
   const [hourlyReport, setHourlyReport] = useState<HourlyReport[]>([])
+  const [totalFromPayments, setTotalFromPayments] = useState(0)
 
   const fetchReports = useCallback(async () => {
     setLoading(true)
@@ -59,6 +60,7 @@ export default function ReportesPage() {
         setAreasReport(data.areas || [])
         setProductsReport(data.products || [])
         setHourlyReport(data.hourly || [])
+        setTotalFromPayments(data.totalFromPayments || 0)
       }
     } catch (error) {
       console.error('Error:', error)
@@ -328,7 +330,7 @@ export default function ReportesPage() {
               <div>
                 <p className="text-xs text-gray-500">Total Vendido</p>
                 <p className="text-lg font-semibold text-gray-900">
-                  {formatCurrency(waitersReport.reduce((sum, w) => sum + w.total, 0))}
+                  {formatCurrency(totalFromPayments)}
                 </p>
               </div>
             </div>

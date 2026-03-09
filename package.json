@@ -10,7 +10,9 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "validate": "node scripts/validate-project.js",
+    "pre-push": "npm run validate"
   },
   "dependencies": {
     "@prisma/client": "^5.9.0",

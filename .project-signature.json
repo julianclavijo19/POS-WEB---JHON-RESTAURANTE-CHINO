@@ -1,0 +1,29 @@
+{
+  "projectName": "comandas-digitales",
+  "projectType": "restaurant-pos-system",
+  "description": "Sistema de comandas digitales para restaurante - El Dragón del Tarra",
+  "railway": true,
+  "database": "supabase",
+  "framework": "nextjs",
+  "requiredFiles": [
+    "package.json",
+    "next.config.js",
+    "prisma/schema.prisma",
+    "railway.json",
+    "nixpacks.toml"
+  ],
+  "requiredDependencies": [
+    "next",
+    "@prisma/client",
+    "@supabase/supabase-js"
+  ],
+  "mustContainFolders": [
+    "src/app",
+    "prisma",
+    "print-server",
+    "cash-drawer-script"
+  ],
+  "projectIdentifier": "comandas-digitales-el-dragon-del-tarra",
+  "createdAt": "2026-03-09",
+  "warning": "⚠️ NO SUBIR CODIGO DE OTROS PROYECTOS A ESTE REPOSITORIO"
+}

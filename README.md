@@ -1,5 +1,8 @@
 # Sistema de Comandas Digitales para Restaurante
 
+> **🔒 PROTECCIÓN ACTIVA**: Este repositorio está protegido contra código mezclado.  
+> Ejecuta `npm run validate` antes de cada push. Ver [PROTECCION_RAILWAY.md](PROTECCION_RAILWAY.md)
+
 Sistema completo de gestión de pedidos para restaurantes, desarrollado con Next.js 14, listo para desplegar en Vercel.
 
 ## 🚀 Características

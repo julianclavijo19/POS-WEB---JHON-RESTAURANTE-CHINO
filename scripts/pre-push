@@ -1,0 +1,22 @@
+#!/bin/sh
+# Git Pre-Push Hook
+# Valida el proyecto antes de hacer push a Railway
+
+echo "🔒 Ejecutando validación de seguridad..."
+
+# Ejecutar el script de validación
+node scripts/validate-project.js
+
+# Capturar el código de salida
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+  echo ""
+  echo "❌ PUSH BLOQUEADO - Validación fallida"
+  echo "⚠️  Posible código de otro proyecto detectado"
+  echo ""
+  exit 1
+fi
+
+echo "✅ Validación exitosa - Permitiendo push"
+exit 0

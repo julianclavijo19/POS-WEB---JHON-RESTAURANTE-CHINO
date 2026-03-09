@@ -1,0 +1,168 @@
+name: 🛡️ Protección de Archivos Críticos
+
+# Alerta cuando se modifican archivos críticos que pueden romper Railway
+# Requiere validación extra para prevenir código mezclado
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'package.json'
+      - 'railway.json'
+      - 'nixpacks.toml'
+      - 'prisma/schema.prisma'
+      - '.project-signature.json'
+      - '*.sql'
+
+jobs:
+  check-critical-files:
+    name: Verificar Modificaciones Críticas
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          
+      - name: 🚨 Detectar archivos críticos modificados
+        id: detect
+        run: |
+          echo "🔍 Detectando archivos críticos modificados..."
+          
+          # Obtener archivos modificados
+          MODIFIED_FILES=$(git diff --name-only HEAD^ HEAD)
+          
+          echo "📝 Archivos modificados:"
+          echo "$MODIFIED_FILES"
+          
+          # Archivos críticos
+          CRITICAL=(
+            "package.json"
+            "railway.json"
+            "nixpacks.toml"
+            "prisma/schema.prisma"
+            ".project-signature.json"
+          )
+          
+          CRITICAL_MODIFIED=""
+          
+          for file in "${CRITICAL[@]}"; do
+            if echo "$MODIFIED_FILES" | grep -q "^$file$"; then
+              echo "⚠️  CRÍTICO: $file fue modificado"
+              CRITICAL_MODIFIED="$CRITICAL_MODIFIED\n- $file"
+            fi
+          done
+          
+          if [ -n "$CRITICAL_MODIFIED" ]; then
+            echo "has_critical=true" >> $GITHUB_OUTPUT
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo -e "$CRITICAL_MODIFIED" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "has_critical=false" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: ⚠️ Advertencia de archivos críticos
+        if: steps.detect.outputs.has_critical == 'true'
+        run: |
+          echo "⚠️  ADVERTENCIA: Archivos críticos modificados"
+          echo ""
+          echo "Los siguientes archivos críticos fueron modificados:"
+          echo "${{ steps.detect.outputs.files }}"
+          echo ""
+          echo "❓ CHECKLIST DE VALIDACIÓN:"
+          echo ""
+          echo "✓ ¿Estos cambios son intencionales?"
+          echo "✓ ¿Estás seguro que NO mezclaste código de otro proyecto?"
+          echo "✓ ¿El nombre en package.json sigue siendo 'comandas-digitales'?"
+          echo "✓ ¿Railway seguirá funcionando con estos cambios?"
+          echo "✓ ¿Ejecutaste 'npm run validate' localmente?"
+          echo ""
+          echo "Si tienes dudas, revisa PROTECCION_RAILWAY.md"
+          
+      - name: 🔍 Validar integridad del proyecto
+        run: |
+          npm install
+          npm run validate
+
+  check-package-name:
+    name: Verificar Nombre del Proyecto
+    runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.changed_files, 'package.json')
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        
+      - name: 🔍 Verificar nombre en package.json
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          
+          echo "📦 Nombre del proyecto: $PACKAGE_NAME"
+          
+          if [ "$PACKAGE_NAME" != "comandas-digitales" ]; then
+            echo "❌ ERROR: Nombre del proyecto incorrecto"
+            echo "❌ Esperado: 'comandas-digitales'"
+            echo "❌ Encontrado: '$PACKAGE_NAME'"
+            echo ""
+            echo "⚠️  ¿Mezclaste código de otro proyecto?"
+            exit 1
+          fi
+          
+          echo "✅ Nombre del proyecto correcto"
+
+  check-railway-config:
+    name: Verificar Configuración de Railway
+    runs-on: ubuntu-latest
+    if: |
+      contains(github.event.pull_request.changed_files, 'railway.json') ||
+      contains(github.event.pull_request.changed_files, 'nixpacks.toml')
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        
+      - name: 🚂 Verificar railway.json
+        if: contains(github.event.pull_request.changed_files, 'railway.json')
+        run: |
+          echo "🔍 Verificando railway.json..."
+          
+          # Verificar que existe el archivo
+          if [ ! -f "railway.json" ]; then
+            echo "❌ railway.json NO EXISTE"
+            exit 1
+          fi
+          
+          # Verificar JSON válido
+          if ! jq empty railway.json 2>/dev/null; then
+            echo "❌ railway.json tiene JSON inválido"
+            exit 1
+          fi
+          
+          # Verificar startCommand
+          START_CMD=$(jq -r '.deploy.startCommand' railway.json)
+          if [ "$START_CMD" != "npm run start" ]; then
+            echo "⚠️  startCommand cambió: $START_CMD"
+            echo "⚠️  Asegúrate de que esto es intencional"
+          fi
+          
+          echo "✅ railway.json válido"
+          
+      - name: 🔨 Verificar nixpacks.toml
+        if: contains(github.event.pull_request.changed_files, 'nixpacks.toml')
+        run: |
+          echo "🔍 Verificando nixpacks.toml..."
+          
+          if [ ! -f "nixpacks.toml" ]; then
+            echo "❌ nixpacks.toml NO EXISTE"
+            exit 1
+          fi
+          
+          # Verificar que contiene el build command correcto
+          if ! grep -q "npm run build" nixpacks.toml; then
+            echo "❌ nixpacks.toml no contiene 'npm run build'"
+            exit 1
+          fi
+          
+          echo "✅ nixpacks.toml válido"

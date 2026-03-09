@@ -1,0 +1,107 @@
+name: 🔒 Validar Proyecto
+
+# Este workflow protege el repositorio validando cada push
+# Evita que código de otros proyectos se mezcle y rompa Railway
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch: # Permite ejecutar manualmente
+
+jobs:
+  validate:
+    name: Validar Integridad del Proyecto
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: 📦 Instalar dependencias de validación
+        run: npm install
+        
+      - name: 🔍 Validar proyecto
+        id: validate
+        run: |
+          echo "🔍 Ejecutando validación de proyecto..."
+          npm run validate
+        continue-on-error: true
+        
+      - name: ✅ Validación exitosa
+        if: steps.validate.outcome == 'success'
+        run: |
+          echo "✅ Proyecto válido - comandas-digitales"
+          echo "✅ Todos los archivos y dependencias correctas"
+          
+      - name: ❌ Validación fallida - Posible código mezclado
+        if: steps.validate.outcome == 'failure'
+        run: |
+          echo "❌ VALIDACIÓN FALLIDA"
+          echo "⚠️  POSIBLE CÓDIGO DE OTRO PROYECTO DETECTADO"
+          echo ""
+          echo "El proyecto no pasó la validación de integridad."
+          echo "Esto puede significar que se mezcló código de otro proyecto."
+          echo ""
+          echo "Revisa los archivos modificados y asegúrate de que:"
+          echo "  - package.json tenga name: 'comandas-digitales'"
+          echo "  - Existan las carpetas: src/app, prisma, print-server"
+          echo "  - Existan los archivos: railway.json, nixpacks.toml"
+          echo ""
+          exit 1
+          
+      - name: 📊 Verificar archivos críticos
+        if: always()
+        run: |
+          echo "📊 Verificando archivos críticos del proyecto..."
+          
+          # Lista de archivos críticos que no deben modificarse sin cuidado
+          CRITICAL_FILES=(
+            "railway.json"
+            "nixpacks.toml"
+            "package.json"
+            "prisma/schema.prisma"
+            "next.config.js"
+          )
+          
+          for file in "${CRITICAL_FILES[@]}"; do
+            if [ -f "$file" ]; then
+              echo "✅ $file existe"
+            else
+              echo "⚠️  $file NO ENCONTRADO"
+            fi
+          done
+
+  # Job adicional para verificar que Railway no se rompa
+  check-build:
+    name: Verificar Build de Railway
+    runs-on: ubuntu-latest
+    needs: validate
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: 📦 Instalar dependencias
+        run: npm ci
+        
+      - name: 🔨 Simular build de Railway
+        run: npm run build
+        env:
+          SKIP_ENV_VALIDATION: true
+          
+      - name: ✅ Build exitoso
+        run: echo "✅ El proyecto compila correctamente - Railway no se romperá"

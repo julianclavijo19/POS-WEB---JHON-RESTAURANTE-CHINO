@@ -1,0 +1,31 @@
+# Archivo CODEOWNERS
+# Define quién debe revisar cambios en archivos críticos del proyecto
+# Esto ayuda a prevenir que código de otros proyectos se mezcle por error
+
+# Archivos de configuración críticos de Railway
+/railway.json @julianclavijo19
+/nixpacks.toml @julianclavijo19
+
+# Configuración del proyecto
+/package.json @julianclavijo19
+/next.config.js @julianclavijo19
+/tsconfig.json @julianclavijo19
+
+# Base de datos - Cambios requieren revisión cuidadosa
+/prisma/schema.prisma @julianclavijo19
+
+# Scripts SQL - Pueden afectar producción
+/*.sql @julianclavijo19
+
+# Protección del proyecto
+/.project-signature.json @julianclavijo19
+/scripts/validate-project.js @julianclavijo19
+
+# GitHub Actions - Workflows de seguridad
+/.github/workflows/ @julianclavijo19
+
+# Variables de entorno - Críticas para Railway
+/.env* @julianclavijo19
+
+# Todos los demás archivos pueden ser modificados libremente
+* @julianclavijo19

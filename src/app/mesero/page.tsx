@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui'
-import { formatCurrency, getTimeDifference } from '@/lib/utils'
+import { formatCurrency, formatOrderNumber, getTimeDifference } from '@/lib/utils'
 import {
   Users, Clock, Plus, Search, Bell, RefreshCw, Timer, Wallet
 } from 'lucide-react'
@@ -89,16 +89,18 @@ export default function MeseroPage() {
   // Check if cash register shift is open
   const checkShiftStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/cajero/turno')
+      const res = await fetch('/api/cajero/turno?summary=true')
       if (res.ok) {
         const data = await res.json()
-        setShiftOpen(!!data.shift)
+        setShiftOpen(Boolean(data.isOpen ?? data.shift))
       } else {
-        setShiftOpen(false)
+        // On server error, only mark as false if we haven't determined status yet
+        // (avoids flashing "no turno" on transient errors when shift is known open)
+        setShiftOpen(prev => prev === null ? false : prev)
       }
     } catch (error) {
       console.error('Error checking shift:', error)
-      setShiftOpen(false)
+      setShiftOpen(prev => prev === null ? false : prev)
     }
   }, [])
 
@@ -398,7 +400,7 @@ export default function MeseroPage() {
                         <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-gray-900">
-                              #ORD-{String(table.current_order.order_number).padStart(6, '0')}
+                              #{formatOrderNumber(table.current_order.order_number)}
                             </span>
                             <span className={`text-xs px-1.5 py-0.5 rounded ${table.current_order.status === 'READY' ? 'bg-green-100 text-green-700' :
                               table.current_order.status === 'DELIVERED' ? 'bg-blue-100 text-blue-700' :

@@ -37,7 +37,7 @@ interface Order {
   total: number
   notes: string | null
   createdAt: string
-  table: { name: string; number: number } | null
+  table: { id: string; name: string; number: number } | null
   waiter: { name: string } | null
   items: OrderItem[]
 }
@@ -215,7 +215,7 @@ export default function OrderDetailPage() {
             <Button
               variant="ghost"
               className="w-full"
-              onClick={() => router.push(`/waiter/order/new?tableId=${order.table?.name || ''}&addTo=${order.id}`)}
+              onClick={() => router.push(`/waiter/order/new?tableId=${order.table?.id || ''}&addTo=${order.id}`)}
             >
               <Plus className="h-4 w-4 mr-2" />
               Agregar más productos

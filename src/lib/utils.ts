@@ -48,6 +48,25 @@ export function generateOrderNumber(): string {
   return `ORD-${year}${month}${day}-${hours}${mins}${secs}${ms}${random}`
 }
 
+export function formatOrderNumber(orderNumber: string | number | null | undefined): string {
+  const rawValue = String(orderNumber ?? '').trim()
+
+  if (!rawValue) {
+    return 'N/A'
+  }
+
+  const legacyDailyMatch = rawValue.match(/^ORD-\d{6}-(\d{4})$/)
+  if (legacyDailyMatch) {
+    return legacyDailyMatch[1]
+  }
+
+  if (/^\d{1,4}$/.test(rawValue)) {
+    return rawValue.padStart(4, '0')
+  }
+
+  return rawValue
+}
+
 export function getTimeDifference(startDate: Date | string): string {
   const start = typeof startDate === 'string' ? new Date(startDate) : startDate
   const now = new Date()

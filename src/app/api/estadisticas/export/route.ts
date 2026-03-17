@@ -12,6 +12,33 @@ function formatDateStr(d: Date): string {
     return `${y}-${m}-${day}`
 }
 
+function getBucketLabels(period: string, refYear: number, refMonth: number, refDay: number): string[] {
+    const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+    if (period === 'day') {
+        return Array.from({ length: 24 }, (_, hour) => `${hour.toString().padStart(2, '0')}:00`)
+    }
+
+    if (period === 'week') {
+        const ref = new Date(refYear, refMonth, refDay)
+        const dow = ref.getDay()
+        const mondayOffset = dow === 0 ? -6 : 1 - dow
+
+        return Array.from({ length: 7 }, (_, index) => {
+            const currentDate = new Date(refYear, refMonth, refDay + mondayOffset + index)
+            return `${dayNames[currentDate.getDay()]} ${currentDate.getDate()}`
+        })
+    }
+
+    if (period === 'month') {
+        const daysInMonth = new Date(refYear, refMonth + 1, 0).getDate()
+        return Array.from({ length: daysInMonth }, (_, index) => String(index + 1).padStart(2, '0'))
+    }
+
+    return monthNames
+}
+
 const periodLabels: Record<string, string> = {
     day: 'Día',
     week: 'Semana',
@@ -207,33 +234,14 @@ export async function GET(request: Request) {
         XLSX.utils.book_append_sheet(wb, wsDetalle, 'Detalle Ventas')
 
         // ── Sheet 3: Ventas por Periodo ──
+        const bucketMap: Record<string, { total: number; count: number }> = {}
         const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
         const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+        const bucketLabels = getBucketLabels(period, refYear, refMonth, refDay)
 
-        const bucketMap: Record<string, { total: number; count: number }> = {}
-
-        if (period === 'day') {
-            for (let h = 0; h < 24; h++) {
-                bucketMap[`${h.toString().padStart(2, '0')}:00`] = { total: 0, count: 0 }
-            }
-        } else if (period === 'week') {
-            const ref = new Date(refYear, refMonth, refDay)
-            const dow = ref.getDay()
-            const mondayOffset = dow === 0 ? -6 : 1 - dow
-            for (let i = 0; i < 7; i++) {
-                const d = new Date(refYear, refMonth, refDay + mondayOffset + i)
-                bucketMap[`${dayNames[d.getDay()]} ${d.getDate()}`] = { total: 0, count: 0 }
-            }
-        } else if (period === 'month') {
-            const daysInMonth = new Date(refYear, refMonth + 1, 0).getDate()
-            for (let d = 1; d <= daysInMonth; d++) {
-                bucketMap[String(d).padStart(2, '0')] = { total: 0, count: 0 }
-            }
-        } else {
-            for (let m = 0; m < 12; m++) {
-                bucketMap[monthNames[m]] = { total: 0, count: 0 }
-            }
-        }
+        bucketLabels.forEach((label) => {
+            bucketMap[label] = { total: 0, count: 0 }
+        })
 
         allPayments.forEach((p: any) => {
             const utcDate = new Date(p.created_at)
@@ -257,10 +265,10 @@ export async function GET(request: Request) {
         })
 
         const periodoHeaders = ['Periodo', 'Total Ventas', '# Transacciones']
-        const periodoRows = Object.entries(bucketMap).map(([label, data]) => [
+        const periodoRows = bucketLabels.map((label) => [
             label,
-            Math.round(data.total),
-            data.count,
+            Math.round(bucketMap[label]?.total || 0),
+            bucketMap[label]?.count || 0,
         ])
 
         const wsPeriodo = XLSX.utils.aoa_to_sheet([periodoHeaders, ...periodoRows])

@@ -41,6 +41,7 @@ export default function MeseroMostradorPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [cart, setCart] = useState<CartItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [shiftLoading, setShiftLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [userId, setUserId] = useState<string | null>(null)
@@ -66,13 +67,18 @@ export default function MeseroMostradorPage() {
 
   const fetchShift = useCallback(async () => {
     try {
-      const res = await fetch('/api/cajero/turno')
+      const res = await fetch('/api/cajero/turno?summary=true')
       if (res.ok) {
         const data = await res.json()
-        setShift(data.shift)
+        setShift(data.isOpen ? data.shift : null)
+      } else {
+        setShift(prev => prev !== undefined ? prev : null)
       }
     } catch (error) {
       console.error('Error:', error)
+      setShift(prev => prev !== undefined ? prev : null)
+    } finally {
+      setShiftLoading(false)
     }
   }, [])
 
@@ -177,7 +183,7 @@ export default function MeseroMostradorPage() {
       )
     : categories.find(c => c.id === selectedCategory)?.products || []
 
-  if (loading) {
+  if (loading || shiftLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>

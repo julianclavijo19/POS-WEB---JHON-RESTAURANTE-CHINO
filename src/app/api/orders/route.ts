@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { generateOrderNumber } from '@/lib/utils'
+import { generateDailyOrderNumber, isUniqueConstraintError } from '@/lib/order-number'
 import { cookies } from 'next/headers'
 import { getTaxRate } from '@/lib/tax'
 
@@ -169,9 +169,6 @@ export async function POST(request: Request) {
 
     console.log('📌 IDs:', { finalTableId, finalWaiterId, itemsCount: items?.length })
 
-    // Generar número de orden único
-    const orderNumber = generateOrderNumber()
-
     // Obtener precios de productos - soportar ambos nombres de propiedades
     const productIds = items.map((i: any) => i.productId || i.product_id)
     console.log('🔍 Buscando productos:', productIds)
@@ -214,23 +211,40 @@ export async function POST(request: Request) {
 
     // Crear la orden - va directo a DELIVERED para que caja pueda cobrar
     // (La cocina trabaja sin sistema, solo gritan cuando está listo)
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        order_number: orderNumber,
-        table_id: finalTableId || null,
-        waiter_id: finalWaiterId || null,
-        type: orderType || 'DINE_IN',
-        status: 'DELIVERED',
-        notes,
-        subtotal,
-        tax,
-        total,
-      })
-      .select()
-      .single()
+    let order: any = null
+    let orderError: any = null
 
-    if (orderError) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const orderNumber = await generateDailyOrderNumber()
+      const insertResult = await supabase
+        .from('orders')
+        .insert({
+          order_number: orderNumber,
+          table_id: finalTableId || null,
+          waiter_id: finalWaiterId || null,
+          type: orderType || 'DINE_IN',
+          status: 'DELIVERED',
+          notes,
+          subtotal,
+          tax,
+          total,
+        })
+        .select()
+        .single()
+
+      order = insertResult.data
+      orderError = insertResult.error
+
+      if (!orderError) {
+        break
+      }
+
+      if (!isUniqueConstraintError(orderError)) {
+        break
+      }
+    }
+
+    if (orderError || !order) {
       console.error('❌ Error creando orden:', orderError)
       throw orderError
     }
@@ -298,6 +312,7 @@ export async function POST(request: Request) {
 
     // Encolar comanda para el servidor de impresión (polling)
     const kitchenPrintPayload = {
+      orderNumber: order.order_number,
       mesa: mesaComanda,
       mesero: waiterName,
       area: areaName || 'N/A',

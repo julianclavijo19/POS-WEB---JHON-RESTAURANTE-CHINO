@@ -16,16 +16,19 @@ interface Table {
   number: number
   capacity: number
   area_id: string
-  status: 'FREE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING'
+  status: 'FREE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING' | 'AVAILABLE' | 'MAINTENANCE'
   is_active: boolean
+  has_active_order?: boolean
   area?: Area
 }
 
 const statusLabels: Record<string, string> = {
   FREE: 'Libre',
+  AVAILABLE: 'Libre',
   OCCUPIED: 'Ocupada',
   RESERVED: 'Reservada',
   CLEANING: 'Limpieza',
+  MAINTENANCE: 'Limpieza',
 }
 
 export default function TablesPage() {
@@ -45,8 +48,12 @@ export default function TablesPage() {
   const fetchTables = async () => {
     try {
       const res = await fetch('/api/tables')
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || 'No se pudo cargar mesas')
+      }
       const data = await res.json()
-      setTables(data)
+      setTables(Array.isArray(data) ? data : [])
     } catch (error) {
       toast.error('Error al cargar mesas')
     } finally {
@@ -57,10 +64,14 @@ export default function TablesPage() {
   const fetchAreas = async () => {
     try {
       const res = await fetch('/api/areas')
+      if (!res.ok) {
+        throw new Error('No se pudo cargar areas')
+      }
       const data = await res.json()
-      setAreas(data)
+      setAreas(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching areas:', error)
+      setAreas([])
     }
   }
 
@@ -82,6 +93,11 @@ export default function TablesPage() {
   }
 
   const handleStatusChange = async (table: Table, newStatus: string) => {
+    if (table.has_active_order) {
+      toast.error('No se puede cambiar estado ni reservar una mesa ocupada')
+      return
+    }
+
     try {
       const res = await fetch(`/api/tables/${table.id}`, {
         method: 'PUT',
@@ -91,6 +107,9 @@ export default function TablesPage() {
       if (res.ok) {
         toast.success('Estado actualizado')
         fetchTables()
+      } else {
+        const error = await res.json().catch(() => ({}))
+        toast.error(error.error || 'Error al actualizar')
       }
     } catch (error) {
       toast.error('Error al actualizar')
@@ -98,6 +117,11 @@ export default function TablesPage() {
   }
 
   const handleEdit = (table: Table) => {
+    if (table.has_active_order) {
+      toast.error('No se puede modificar una mesa ocupada hasta que se desocupe')
+      return
+    }
+
     setSelectedTable(table)
     setIsModalOpen(true)
   }
@@ -118,18 +142,25 @@ export default function TablesPage() {
   }
 
   const filteredTables = tables.filter((table) => {
-    const matchesSearch = table.name.toLowerCase().includes(search.toLowerCase()) ||
-      table.number.toString().includes(search)
+    const tableName = table.name || ''
+    const tableNumber = table.number != null ? String(table.number) : ''
+    const matchesSearch = tableName.toLowerCase().includes(search.toLowerCase()) ||
+      tableNumber.includes(search)
     const matchesArea = !filterArea || table.area_id === filterArea
-    const matchesStatus = !filterStatus || table.status === filterStatus
+    const normalizedStatus = table.status === 'AVAILABLE'
+      ? 'FREE'
+      : table.status === 'MAINTENANCE'
+        ? 'CLEANING'
+        : table.status
+    const matchesStatus = !filterStatus || normalizedStatus === filterStatus
     return matchesSearch && matchesArea && matchesStatus
   })
 
   const tablesByStatus = {
-    FREE: tables.filter(t => t.status === 'FREE').length,
+    FREE: tables.filter(t => t.status === 'FREE' || t.status === 'AVAILABLE').length,
     OCCUPIED: tables.filter(t => t.status === 'OCCUPIED').length,
     RESERVED: tables.filter(t => t.status === 'RESERVED').length,
-    CLEANING: tables.filter(t => t.status === 'CLEANING').length,
+    CLEANING: tables.filter(t => t.status === 'CLEANING' || t.status === 'MAINTENANCE').length,
   }
 
   if (loading) {
@@ -259,34 +290,40 @@ export default function TablesPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <select
-                      value={table.status}
+                      value={table.status === 'AVAILABLE' ? 'FREE' : table.status === 'MAINTENANCE' ? 'CLEANING' : table.status}
                       onChange={(e) => handleStatusChange(table, e.target.value)}
-                      className={`px-2.5 py-1 text-xs font-medium rounded border-0 cursor-pointer ${
-                        table.status === 'FREE' ? 'bg-gray-100 text-gray-700' :
+                      disabled={Boolean(table.has_active_order)}
+                      className={`px-2.5 py-1 text-xs font-medium rounded border-0 ${
+                        (table.status === 'FREE' || table.status === 'AVAILABLE') ? 'bg-gray-100 text-gray-700' :
                         table.status === 'OCCUPIED' ? 'bg-gray-900 text-white' :
                         table.status === 'RESERVED' ? 'bg-gray-700 text-white' :
                         'bg-gray-300 text-gray-700'
-                      }`}
+                      } ${table.has_active_order ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
                     >
                       <option value="FREE">Libre</option>
                       <option value="OCCUPIED">Ocupada</option>
                       <option value="RESERVED">Reservada</option>
                       <option value="CLEANING">Limpieza</option>
                     </select>
+                    {table.has_active_order && (
+                      <p className="text-[11px] text-gray-500 mt-1">Desocupe la mesa para modificar o reservar</p>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => handleEdit(table)}
-                        className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                        disabled={Boolean(table.has_active_order)}
+                        className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         title="Editar"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(table.id)}
-                        className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
-                        title="Eliminar"
+                        disabled={Boolean(table.has_active_order)}
+                        className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={table.has_active_order ? 'No se puede eliminar mesa ocupada' : 'Eliminar'}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

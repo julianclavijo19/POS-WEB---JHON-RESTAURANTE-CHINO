@@ -77,7 +77,7 @@ export default function ReimpresionesPage() {
   const handlePrint = async (order: Order, printType: 'TICKET' | 'INVOICE') => {
     const payment = order.payments?.[0]
     const orderData: OrderData = {
-      orderNumber: parseInt(order.order_number) || 0,
+      orderNumber: order.order_number,
       tableName: order.table?.name || 'Para llevar',
       waiterName: order.waiter?.name || '',
       createdAt: order.created_at,

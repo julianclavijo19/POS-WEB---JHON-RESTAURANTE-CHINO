@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { generateOrderNumber } from '@/lib/utils'
+import { generateDailyOrderNumber, isUniqueConstraintError } from '@/lib/order-number'
 import { getTaxRate } from '@/lib/tax'
 
 export const dynamic = 'force-dynamic'
@@ -48,8 +48,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No hay productos en la orden' }, { status: 400 })
     }
 
-    const orderNumber = generateOrderNumber()
-
     // Obtener precios de productos
     const productIds = items.map((i: any) => i.product_id)
     const { data: products, error: productsError } = await supabase
@@ -83,23 +81,40 @@ export async function POST(request: Request) {
     const total = subtotal + tax
 
     // Crear orden de mostrador - DELIVERED directamente, sin mesa
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .insert({
-        order_number: orderNumber,
-        table_id: null,
-        waiter_id: cashier_id || null,
-        type: 'COUNTER',
-        status: 'DELIVERED',
-        notes: notes || 'Venta mostrador',
-        subtotal,
-        tax,
-        total,
-      })
-      .select()
-      .single()
+    let order: any = null
+    let orderError: any = null
 
-    if (orderError) throw orderError
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const orderNumber = await generateDailyOrderNumber()
+      const insertResult = await supabase
+        .from('orders')
+        .insert({
+          order_number: orderNumber,
+          table_id: null,
+          waiter_id: cashier_id || null,
+          type: 'COUNTER',
+          status: 'DELIVERED',
+          notes: notes || 'Venta mostrador',
+          subtotal,
+          tax,
+          total,
+        })
+        .select()
+        .single()
+
+      order = insertResult.data
+      orderError = insertResult.error
+
+      if (!orderError) {
+        break
+      }
+
+      if (!isUniqueConstraintError(orderError)) {
+        break
+      }
+    }
+
+    if (orderError || !order) throw orderError
 
     // Crear items
     const itemsWithOrderId = orderItems.map(item => ({

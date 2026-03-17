@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui'
-import { formatCurrency, getTimeDifference, formatMiles, parseMiles } from '@/lib/utils'
+import { formatCurrency, formatOrderNumber, getTimeDifference, formatMiles, parseMiles } from '@/lib/utils'
 import {
   ArrowLeft, Clock, CheckCircle, Plus, AlertCircle, CreditCard,
   Receipt, Printer, DollarSign, Users, Send, ChefHat, Minus, Trash2, Edit2
@@ -25,7 +25,7 @@ interface OrderItem {
 
 interface Order {
   id: string
-  orderNumber: number
+  orderNumber: string | number
   status: string
   type?: string
   notes?: string
@@ -248,37 +248,41 @@ export default function ComandaDetailCajeroPage() {
     }
   }
 
-  const addItem = async () => {
+  const addItem = async (printCorrection = false) => {
     if (!selectedProduct) return
     const product = products.find(p => p.id === selectedProduct)
     if (!product) return
 
     try {
+      const payload: Record<string, any> = {
+        product_id: selectedProduct,
+        quantity: newItemQty,
+        unit_price: product.price,
+        notes: newItemNotes
+      }
+
+      if (printCorrection && order) {
+        payload.printCorrection = true
+        payload.correctionPayload = {
+          tipo: 'AGREGAR',
+          orderNumber: order.orderNumber,
+          mesa: order.table?.name || 'Caja',
+          mesero: order.waiter?.name || 'Caja',
+          items: [{
+            nombre: product.name,
+            cantidad: newItemQty,
+            notas: newItemNotes
+          }]
+        }
+      }
+
       const res = await fetch(`/api/orders/${orderId}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product_id: selectedProduct,
-          quantity: newItemQty,
-          unit_price: product.price,
-          notes: newItemNotes
-        })
+        body: JSON.stringify(payload)
       })
       if (res.ok) {
-        toast.success('Agregado')
-
-        if (order) {
-          printCorrectionTicket({
-            tipo: 'AGREGAR',
-            mesa: order.table?.name || 'Caja',
-            mesero: order.waiter?.name || 'Caja',
-            items: [{
-              nombre: product.name,
-              cantidad: newItemQty,
-              notas: newItemNotes
-            }]
-          })
-        }
+        toast.success(printCorrection ? 'Agregado e impresión en cola' : 'Agregado')
 
         setShowAddItem(false)
         setSelectedProduct('')
@@ -392,7 +396,7 @@ export default function ComandaDetailCajeroPage() {
           </button>
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">
-              Comanda #ORD-{String(order.orderNumber).padStart(6, '0')} - {getOrderLocationName()}
+              Comanda #{formatOrderNumber(order.orderNumber)} - {getOrderLocationName()}
             </h1>
             <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
               <span className="font-medium text-gray-700">Atendido por: {order.waiter?.name || 'Sin asignar'}</span>
@@ -574,7 +578,8 @@ export default function ComandaDetailCajeroPage() {
               </div>
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" className="flex-1" onClick={() => setShowAddItem(false)}>Cancelar</Button>
-                <Button className="flex-1 bg-gray-900 hover:bg-gray-800 text-white" onClick={addItem} disabled={!selectedProduct}>Agregar</Button>
+                <Button variant="outline" className="flex-1" onClick={() => addItem(false)} disabled={!selectedProduct}>Sin imprimir</Button>
+                <Button className="flex-1 bg-gray-900 hover:bg-gray-800 text-white" onClick={() => addItem(true)} disabled={!selectedProduct}>Agregar e imprimir</Button>
               </div>
             </CardContent>
           </Card>

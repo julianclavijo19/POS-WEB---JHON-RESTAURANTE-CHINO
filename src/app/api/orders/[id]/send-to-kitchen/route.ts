@@ -100,6 +100,7 @@ export async function POST(
     const areaName = (order?.table as any)?.area?.name || 'N/A'
     const waiterName = order?.waiter?.name || 'N/A'
     const kitchenPayload = {
+      orderNumber: order?.order_number,
       mesa: tableName,
       mesero: waiterName,
       area: areaName,

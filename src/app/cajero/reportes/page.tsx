@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 
 type ReportTab = 'meseros' | 'areas' | 'productos' | 'horas'
+type Period = 'day' | 'week' | 'month' | 'year'
 
 interface WaiterReport {
   id: string
@@ -41,6 +42,7 @@ interface HourlyReport {
 
 export default function ReportesPage() {
   const [activeTab, setActiveTab] = useState<ReportTab>('meseros')
+  const [period, setPeriod] = useState<Period>('day')
   const [loading, setLoading] = useState(true)
   const [dateFilter, setDateFilter] = useState(getColombiaDateString())
   
@@ -53,7 +55,7 @@ export default function ReportesPage() {
   const fetchReports = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/cajero/reportes?date=${dateFilter}`)
+      const res = await fetch(`/api/cajero/reportes?period=${period}&date=${dateFilter}`)
       if (res.ok) {
         const data = await res.json()
         setWaitersReport(data.waiters || [])
@@ -67,7 +69,7 @@ export default function ReportesPage() {
     } finally {
       setLoading(false)
     }
-  }, [dateFilter])
+  }, [dateFilter, period])
 
   useEffect(() => {
     fetchReports()
@@ -87,6 +89,12 @@ export default function ReportesPage() {
   }
 
   const maxHourlyTotal = Math.max(...hourlyReport.map(h => h.total), 1)
+  const periodLabels: Record<Period, string> = {
+    day: 'del día',
+    week: 'de la semana',
+    month: 'del mes',
+    year: 'del año',
+  }
 
   if (loading) {
     return (
@@ -102,7 +110,7 @@ export default function ReportesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">Reportes</h1>
-          <p className="text-gray-500 text-sm mt-1">Análisis de ventas y rendimiento</p>
+          <p className="text-gray-500 text-sm mt-1">Análisis de ventas y rendimiento {periodLabels[period]}</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -121,6 +129,27 @@ export default function ReportesPage() {
             <RefreshCw className="h-5 w-5 text-gray-600" />
           </button>
         </div>
+      </div>
+
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
+        {([
+          { id: 'day', label: 'Día' },
+          { id: 'week', label: 'Semana' },
+          { id: 'month', label: 'Mes' },
+          { id: 'year', label: 'Año' },
+        ] as const).map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setPeriod(item.id)}
+            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+              period === item.id
+                ? 'bg-gray-900 text-white shadow-sm'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
 
       {/* Tabs */}
@@ -149,7 +178,7 @@ export default function ReportesPage() {
             <Card>
               <CardContent className="p-12 text-center">
                 <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No hay datos de meseros para esta fecha</p>
+                <p className="text-gray-500">No hay datos de meseros para este período</p>
               </CardContent>
             </Card>
           ) : (
@@ -191,7 +220,7 @@ export default function ReportesPage() {
             <Card>
               <CardContent className="p-12 text-center">
                 <MapPin className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No hay datos de áreas para esta fecha</p>
+                <p className="text-gray-500">No hay datos de áreas para este período</p>
               </CardContent>
             </Card>
           ) : (
@@ -240,7 +269,7 @@ export default function ReportesPage() {
             <Card>
               <CardContent className="p-12 text-center">
                 <ShoppingBag className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No hay datos de productos para esta fecha</p>
+                <p className="text-gray-500">No hay datos de productos para este período</p>
               </CardContent>
             </Card>
           ) : (
@@ -280,7 +309,7 @@ export default function ReportesPage() {
             <Card>
               <CardContent className="p-12 text-center">
                 <Clock className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No hay datos de ventas para esta fecha</p>
+                <p className="text-gray-500">No hay datos de ventas para este período</p>
               </CardContent>
             </Card>
           ) : (
@@ -344,7 +373,7 @@ export default function ReportesPage() {
                 <Users className="h-5 w-5 text-gray-600" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Meseros Activos</p>
+                <p className="text-xs text-gray-500">Meseros Registrados</p>
                 <p className="text-lg font-semibold text-gray-900">{waitersReport.length}</p>
               </div>
             </div>
@@ -374,7 +403,7 @@ export default function ReportesPage() {
                 <MapPin className="h-5 w-5 text-gray-600" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Áreas Activas</p>
+                <p className="text-xs text-gray-500">Áreas Registradas</p>
                 <p className="text-lg font-semibold text-gray-900">{areasReport.length}</p>
               </div>
             </div>

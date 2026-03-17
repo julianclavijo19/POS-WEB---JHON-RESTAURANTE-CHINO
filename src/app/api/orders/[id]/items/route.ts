@@ -12,6 +12,7 @@ export async function POST(
   try {
     const { id: orderId } = await params
     const body = await request.json()
+    const shouldPrintCorrection = body.printCorrection === true || body.print_correction === true
 
     // Soportar tanto un array de items como un item individual
     const items = body.items || [body]
@@ -99,7 +100,34 @@ export async function POST(
 
     if (error) throw error
 
-    // La impresión de correcciones se maneja desde el cliente (browser)
+    if (shouldPrintCorrection) {
+      const providedPayload = body.correctionPayload || body.correction_payload
+      const defaultPayload = {
+        tipo: 'AGREGAR',
+        orderNumber: order.order_number,
+        mesa: order.table?.name || (order.type === 'DELIVERY' ? 'Domicilio' : order.type === 'TAKEOUT' || order.type === 'TAKEAWAY' ? 'Para llevar' : 'N/A'),
+        area: (order.table as any)?.area?.name || 'N/A',
+        mesero: order.waiter?.name || 'N/A',
+        items: (createdItems || []).map((item: any) => ({
+          nombre: item?.product?.name || 'Producto',
+          cantidad: item?.quantity || 1,
+          notas: item?.notes || '',
+        })),
+      }
+
+      await supabase
+        .from('print_queue')
+        .insert({
+          type: 'correction',
+          payload: providedPayload || defaultPayload,
+        })
+        .then(({ error: queueError }) => {
+          if (queueError) {
+            console.error('Error encolando corrección:', queueError)
+          }
+        })
+    }
+
     return NextResponse.json(order)
   } catch (error) {
     console.error('Error adding items to order:', error)

@@ -15,7 +15,7 @@ interface Table {
   number: number
   capacity: number
   area_id: string
-  status: 'FREE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING'
+  status: 'FREE' | 'OCCUPIED' | 'RESERVED' | 'CLEANING' | 'AVAILABLE' | 'MAINTENANCE'
   is_active: boolean
 }
 
@@ -40,12 +40,18 @@ export function TableModal({ isOpen, onClose, onSave, table, areas }: TableModal
 
   useEffect(() => {
     if (table) {
+      const normalizedStatus = table.status === 'AVAILABLE'
+        ? 'FREE'
+        : table.status === 'MAINTENANCE'
+          ? 'CLEANING'
+          : table.status
+
       setFormData({
         name: table.name,
         number: table.number,
         capacity: table.capacity,
         area_id: table.area_id,
-        status: table.status,
+        status: normalizedStatus,
         is_active: table.is_active,
       })
     } else {

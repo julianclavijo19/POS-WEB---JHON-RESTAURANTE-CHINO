@@ -19,6 +19,33 @@ function formatDateStr(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
+function getBucketLabels(period: string, refYear: number, refMonth: number, refDay: number): string[] {
+  const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
+  const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+  if (period === 'day') {
+    return Array.from({ length: 24 }, (_, hour) => `${hour.toString().padStart(2, '0')}:00`)
+  }
+
+  if (period === 'week') {
+    const ref = new Date(refYear, refMonth, refDay)
+    const dow = ref.getDay()
+    const mondayOffset = dow === 0 ? -6 : 1 - dow
+
+    return Array.from({ length: 7 }, (_, index) => {
+      const currentDate = new Date(refYear, refMonth, refDay + mondayOffset + index)
+      return `${dayNames[currentDate.getDay()]} ${currentDate.getDate()}`
+    })
+  }
+
+  if (period === 'month') {
+    const daysInMonth = new Date(refYear, refMonth + 1, 0).getDate()
+    return Array.from({ length: daysInMonth }, (_, index) => String(index + 1).padStart(2, '0'))
+  }
+
+  return monthNames
+}
+
 // GET - Sales statistics by period
 export async function GET(request: Request) {
   try {
@@ -96,34 +123,13 @@ export async function GET(request: Request) {
 
     // Group by bucket
     const bucketMap: Record<string, { total: number; count: number }> = {}
-
     const dayNames = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
     const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+    const bucketLabels = getBucketLabels(period, refYear, refMonth, refDay)
 
-    // Pre-populate buckets
-    if (period === 'day') {
-      for (let h = 0; h < 24; h++) {
-        bucketMap[`${h.toString().padStart(2, '0')}:00`] = { total: 0, count: 0 }
-      }
-    } else if (period === 'week') {
-      const ref = new Date(refYear, refMonth, refDay)
-      const dow = ref.getDay()
-      const mondayOffset = dow === 0 ? -6 : 1 - dow
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(refYear, refMonth, refDay + mondayOffset + i)
-        const key = `${dayNames[d.getDay()]} ${d.getDate()}`
-        bucketMap[key] = { total: 0, count: 0 }
-      }
-    } else if (period === 'month') {
-      const daysInMonth = new Date(refYear, refMonth + 1, 0).getDate()
-      for (let d = 1; d <= daysInMonth; d++) {
-        bucketMap[String(d).padStart(2, '0')] = { total: 0, count: 0 }
-      }
-    } else if (period === 'year') {
-      for (let m = 0; m < 12; m++) {
-        bucketMap[monthNames[m]] = { total: 0, count: 0 }
-      }
-    }
+    bucketLabels.forEach((label) => {
+      bucketMap[label] = { total: 0, count: 0 }
+    })
 
     // Fill buckets — convert UTC timestamp to Colombia time (UTC-5)
     allPayments.forEach((p: any) => {
@@ -148,10 +154,10 @@ export async function GET(request: Request) {
       bucketMap[key].count += 1
     })
 
-    const sales = Object.entries(bucketMap).map(([date, data]) => ({
-      date,
-      total: Math.round(data.total),
-      count: data.count,
+    const sales = bucketLabels.map((label) => ({
+      date: label,
+      total: Math.round(bucketMap[label]?.total || 0),
+      count: bucketMap[label]?.count || 0,
     }))
 
     // Summary

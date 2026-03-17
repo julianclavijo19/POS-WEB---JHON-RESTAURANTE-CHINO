@@ -4,9 +4,14 @@ import { cookies } from 'next/headers'
 
 export const dynamic = 'force-dynamic'
 
+const RESTAURANT_SHIFT_FILTER = 'register_type.is.null,register_type.eq.RESTAURANT'
+
 // GET - Obtener turno actual del cajero
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const summaryOnly = searchParams.get('summary') === 'true'
+
     // Obtener usuario de la sesión
     const cookieStore = await cookies()
     const sessionCookie = cookieStore.get('session')
@@ -26,12 +31,22 @@ export async function GET() {
       .from('cash_registers')
       .select('*')
       .eq('status', 'OPEN')
+      .or(RESTAURANT_SHIFT_FILTER)
       .order('opened_at', { ascending: false })
       .limit(1)
       .single()
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
       throw error
+    }
+
+    if (currentShift && summaryOnly) {
+      return NextResponse.json({
+        shift: currentShift,
+        transactions: [],
+        refunds: [],
+        isOpen: true
+      })
     }
 
     // Si hay turno abierto, obtener transacciones del turno (incluye devoluciones con amount negativo)
@@ -130,6 +145,7 @@ export async function POST(request: Request) {
       .from('cash_registers')
       .select('id')
       .eq('status', 'OPEN')
+      .or(RESTAURANT_SHIFT_FILTER)
       .single()
 
     if (existingShift) {
@@ -146,6 +162,7 @@ export async function POST(request: Request) {
         user_id: user_id,
         opening_amount: opening_amount || 0,
         status: 'OPEN',
+        register_type: 'RESTAURANT',
         opened_at: new Date().toISOString()
       })
       .select()
@@ -184,6 +201,13 @@ export async function PUT(request: Request) {
       return NextResponse.json(
         { error: 'Turno no encontrado' },
         { status: 404 }
+      )
+    }
+
+    if (shift.register_type && shift.register_type !== 'RESTAURANT') {
+      return NextResponse.json(
+        { error: 'El turno no corresponde a la caja del restaurante' },
+        { status: 400 }
       )
     }
 

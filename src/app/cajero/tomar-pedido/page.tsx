@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui'
-import { formatCurrency, getTimeDifference } from '@/lib/utils'
+import { formatCurrency, formatOrderNumber, getTimeDifference } from '@/lib/utils'
 import { 
   Users, Clock, Plus, Search, RefreshCw, Timer, ArrowLeft, AlertTriangle
 } from 'lucide-react'
@@ -275,7 +275,7 @@ export default function CajeroTomarPedidoPage() {
                         <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-gray-900">
-                              #ORD-{String(table.current_order.order_number).padStart(6, '0')}
+                              #{formatOrderNumber(table.current_order.order_number)}
                             </span>
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
                               table.current_order.status === 'READY' ? 'bg-green-100 text-green-700' :

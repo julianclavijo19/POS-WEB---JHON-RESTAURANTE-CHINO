@@ -189,6 +189,8 @@ async function printKitchenOrder(orderData) {
 
   // ========== INFORMACIÓN ==========
   printer.alignLeft();
+  const ticketOrderNumber = orderData.orderNumber || orderData.order_number || orderData.comanda || 'N/A';
+  printer.println(`Comanda: ${ticketOrderNumber}`);
   printer.println(`Mesero: ${orderData.mesero || 'N/A'}`);
   printer.println(`Mesa: ${orderData.mesa || 'N/A'}`);
   printer.println(`Area: ${orderData.area || 'N/A'}`);
@@ -302,6 +304,10 @@ async function printCorrectionOrder(orderData) {
   
   // ========== INFORMACIÓN ==========
   printer.alignLeft();
+  const correctionOrderNumber = orderData.orderNumber || orderData.order_number || orderData.comanda || null;
+  if (correctionOrderNumber) {
+    printer.println(`Comanda: ${correctionOrderNumber}`);
+  }
   printer.println(`Mesero: ${orderData.mesero || 'N/A'}`);
   printer.println(`Mesa: ${orderData.mesa || 'N/A'}`);
   printer.println(`Area: ${orderData.area || 'N/A'}`);

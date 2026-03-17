@@ -42,6 +42,7 @@ export default function NewOrderPage() {
   const searchParams = useSearchParams()
   const { data: session } = useSession()
   const tableId = searchParams.get('tableId')
+  const addToOrderId = searchParams.get('addTo')
 
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -182,6 +183,47 @@ export default function NewOrderPage() {
     }
   }
 
+  const handleAddItemsToExistingOrder = async (printCorrection: boolean) => {
+    if (cart.length === 0) {
+      toast.error('Agrega productos al pedido')
+      return
+    }
+
+    if (!addToOrderId) {
+      toast.error('No se encontró la orden a actualizar')
+      return
+    }
+
+    setSending(true)
+    try {
+      const res = await fetch(`/api/orders/${addToOrderId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: cart.map((item) => ({
+            product_id: item.product.id,
+            quantity: item.quantity,
+            unit_price: item.product.price,
+            notes: item.notes,
+          })),
+          printCorrection,
+        }),
+      })
+
+      if (!res.ok) {
+        throw new Error('Error adding items to order')
+      }
+
+      toast.success(printCorrection ? 'Productos agregados e impresión en cola' : 'Productos agregados')
+      router.push(`/waiter/order/${addToOrderId}`)
+    } catch (error) {
+      toast.error('Error al agregar productos')
+      console.error(error)
+    } finally {
+      setSending(false)
+    }
+  }
+
   const subtotal = cart.reduce(
     (sum, item) => sum + Number(item.product.price) * item.quantity,
     0
@@ -214,7 +256,7 @@ export default function NewOrderPage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-xl font-bold">Nuevo Pedido</h1>
+              <h1 className="text-xl font-bold">{addToOrderId ? 'Agregar Productos' : 'Nuevo Pedido'}</h1>
               <p className="text-sm text-gray-500">{tableName || 'Para llevar'}</p>
             </div>
           </div>
@@ -372,17 +414,42 @@ export default function NewOrderPage() {
             <span className="text-gray-600">Subtotal</span>
             <span className="text-xl font-bold">{formatCurrency(subtotal)}</span>
           </div>
-          <Button
-            variant="success"
-            size="lg"
-            className="w-full"
-            onClick={handleSendToKitchen}
-            disabled={cart.length === 0 || sending}
-            isLoading={sending}
-          >
-            <Send className="h-5 w-5 mr-2" />
-            Enviar a Cocina
-          </Button>
+          {addToOrderId ? (
+            <div className="grid grid-cols-1 gap-2">
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full"
+                onClick={() => handleAddItemsToExistingOrder(false)}
+                disabled={cart.length === 0 || sending}
+              >
+                Agregar sin imprimir
+              </Button>
+              <Button
+                variant="success"
+                size="lg"
+                className="w-full"
+                onClick={() => handleAddItemsToExistingOrder(true)}
+                disabled={cart.length === 0 || sending}
+                isLoading={sending}
+              >
+                <Send className="h-5 w-5 mr-2" />
+                Agregar e imprimir
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="success"
+              size="lg"
+              className="w-full"
+              onClick={handleSendToKitchen}
+              disabled={cart.length === 0 || sending}
+              isLoading={sending}
+            >
+              <Send className="h-5 w-5 mr-2" />
+              Enviar a Cocina
+            </Button>
+          )}
         </div>
       </div>
 

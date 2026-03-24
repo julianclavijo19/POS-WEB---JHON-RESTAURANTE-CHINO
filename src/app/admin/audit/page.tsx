@@ -55,9 +55,27 @@ export default function AuditPage() {
   const [filterModule, setFilterModule] = useState('all')
   const [dateRange, setDateRange] = useState('today')
 
+  const toBogotaDate = (date: Date) =>
+    new Date(date.toLocaleString('en-US', { timeZone: 'America/Bogota' }))
+
+  const resolveActor = (...candidates: any[]) => {
+    for (const candidate of candidates) {
+      if (candidate && (candidate.id || candidate.name || candidate.role)) {
+        return {
+          id: candidate.id || 'unknown',
+          name: candidate.name || 'Desconocido',
+          role: candidate.role || 'N/A',
+        }
+      }
+    }
+
+    return { id: 'unknown', name: 'Desconocido', role: 'N/A' }
+  }
+
   const formatTime = (date: Date) => {
-    const now = new Date()
-    const diff = now.getTime() - date.getTime()
+    const now = toBogotaDate(new Date())
+    const eventDate = toBogotaDate(date)
+    const diff = now.getTime() - eventDate.getTime()
     const minutes = Math.floor(diff / (1000 * 60))
     const hours = Math.floor(diff / (1000 * 60 * 60))
     
@@ -66,7 +84,8 @@ export default function AuditPage() {
     } else if (hours < 24) {
       return `hace ${hours} horas`
     } else {
-      return date.toLocaleDateString('es-ES', { 
+      return eventDate.toLocaleString('es-CO', {
+        timeZone: 'America/Bogota',
         day: '2-digit', 
         month: '2-digit',
         hour: '2-digit',
@@ -115,7 +134,8 @@ export default function AuditPage() {
           total,
           created_at,
           updated_at,
-          waiter:users!orders_waiter_id_fkey(id, name, role)
+          waiter:users!orders_waiter_id_fkey(id, name, role),
+          paidBy:users!orders_paid_by_fkey(id, name, role)
         `)
         .gte('created_at', dateFilter)
         .order('created_at', { ascending: false })
@@ -124,39 +144,44 @@ export default function AuditPage() {
       if (orders) {
         orders.forEach((order: any) => {
           const waiter = order.waiter
+          const paidBy = order.paidBy
+          const creatorActor = resolveActor(waiter, paidBy)
+
           auditLogs.push({
             id: `order-create-${order.id}`,
             action: 'CREATE',
             module: 'orders',
             description: `Creó orden #${order.order_number} - ${formatCurrency(parseFloat(order.total) || 0)}`,
-            userId: waiter?.id || 'system',
-            userName: waiter?.name || 'Sistema',
-            userRole: waiter?.role || 'SYSTEM',
+            userId: creatorActor.id,
+            userName: creatorActor.name,
+            userRole: creatorActor.role,
             timestamp: new Date(order.created_at),
           })
 
           if (order.status === 'PAID') {
+            const paymentActor = resolveActor(paidBy, waiter)
             auditLogs.push({
               id: `order-paid-${order.id}`,
               action: 'PAYMENT',
               module: 'payments',
               description: `Cobró orden #${order.order_number} - ${formatCurrency(parseFloat(order.total) || 0)}`,
-              userId: waiter?.id || 'system',
-              userName: waiter?.name || 'Sistema',
-              userRole: waiter?.role || 'SYSTEM',
+              userId: paymentActor.id,
+              userName: paymentActor.name,
+              userRole: paymentActor.role,
               timestamp: new Date(order.updated_at || order.created_at),
             })
           }
 
           if (order.status === 'CANCELLED') {
+            const cancelActor = resolveActor(paidBy, waiter)
             auditLogs.push({
               id: `order-cancel-${order.id}`,
               action: 'CANCEL',
               module: 'orders',
               description: `Canceló orden #${order.order_number}`,
-              userId: waiter?.id || 'system',
-              userName: waiter?.name || 'Sistema',
-              userRole: waiter?.role || 'SYSTEM',
+              userId: cancelActor.id,
+              userName: cancelActor.name,
+              userRole: cancelActor.role,
               timestamp: new Date(order.updated_at || order.created_at),
             })
           }
@@ -169,10 +194,16 @@ export default function AuditPage() {
         .select(`
           id,
           amount,
-          payment_method,
+          method,
           created_at,
-          order:orders(order_number),
-          cashier:users!payments_cashier_id_fkey(id, name, role)
+          order:orders(
+            order_number,
+            waiter:users!orders_waiter_id_fkey(id, name, role),
+            paidBy:users!orders_paid_by_fkey(id, name, role)
+          ),
+          cashRegister:cash_registers(
+            user:users(id, name, role)
+          )
         `)
         .gte('created_at', dateFilter)
         .order('created_at', { ascending: false })
@@ -180,16 +211,20 @@ export default function AuditPage() {
 
       if (payments) {
         payments.forEach((payment: any) => {
-          const cashier = payment.cashier
+          const cashier = payment.cashRegister?.user
+          const paidBy = payment.order?.paidBy
+          const waiter = payment.order?.waiter
           const order = payment.order
+          const paymentActor = resolveActor(cashier, paidBy, waiter)
+
           auditLogs.push({
             id: `payment-${payment.id}`,
             action: 'PAYMENT',
             module: 'payments',
-            description: `Registró pago de ${formatCurrency(parseFloat(payment.amount) || 0)} (${payment.payment_method}) - Orden #${order?.order_number || 'N/A'}`,
-            userId: cashier?.id || 'system',
-            userName: cashier?.name || 'Sistema',
-            userRole: cashier?.role || 'CASHIER',
+            description: `Registró pago de ${formatCurrency(parseFloat(payment.amount) || 0)} (${payment.method || 'N/A'}) - Orden #${order?.order_number || 'N/A'}`,
+            userId: paymentActor.id,
+            userName: paymentActor.name,
+            userRole: paymentActor.role,
             timestamp: new Date(payment.created_at),
           })
         })
@@ -215,6 +250,7 @@ export default function AuditPage() {
         stockMovements.forEach((movement: any) => {
           const ingredient = movement.ingredient
           const user = movement.user
+          const movementActor = resolveActor(user)
           const actionMap: Record<string, string> = {
             'IN': 'Entrada',
             'OUT': 'Salida',
@@ -226,9 +262,9 @@ export default function AuditPage() {
             action: 'UPDATE',
             module: 'inventory',
             description: `${actionMap[movement.movement_type] || movement.movement_type} de ${movement.quantity} - ${ingredient?.name || 'Ingrediente'} ${movement.notes ? `(${movement.notes})` : ''}`,
-            userId: user?.id || 'system',
-            userName: user?.name || 'Sistema',
-            userRole: user?.role || 'ADMIN',
+            userId: movementActor.id,
+            userName: movementActor.name,
+            userRole: movementActor.role,
             timestamp: new Date(movement.created_at),
           })
         })
@@ -253,14 +289,15 @@ export default function AuditPage() {
       if (cashRegisters) {
         cashRegisters.forEach((register: any) => {
           const user = register.user
+          const cashActor = resolveActor(user)
           auditLogs.push({
             id: `cash-open-${register.id}`,
             action: 'CREATE',
             module: 'cash_register',
             description: `Abrió caja con ${formatCurrency(parseFloat(register.opening_amount) || 0)}`,
-            userId: user?.id || 'system',
-            userName: user?.name || 'Sistema',
-            userRole: user?.role || 'CASHIER',
+            userId: cashActor.id,
+            userName: cashActor.name,
+            userRole: cashActor.role,
             timestamp: new Date(register.opened_at),
           })
 
@@ -270,9 +307,9 @@ export default function AuditPage() {
               action: 'UPDATE',
               module: 'cash_register',
               description: `Cerró caja con ${formatCurrency(parseFloat(register.closing_amount) || 0)}`,
-              userId: user?.id || 'system',
-              userName: user?.name || 'Sistema',
-              userRole: user?.role || 'CASHIER',
+              userId: cashActor.id,
+              userName: cashActor.name,
+              userRole: cashActor.role,
               timestamp: new Date(register.closed_at),
             })
           }
@@ -354,14 +391,15 @@ export default function AuditPage() {
       if (invoices) {
         invoices.forEach((invoice: any) => {
           const cashier = invoice.cashier
+          const invoiceActor = resolveActor(cashier)
           auditLogs.push({
             id: `invoice-${invoice.id}`,
             action: 'CREATE',
             module: 'payments',
             description: `Generó factura #${invoice.invoice_number} - ${formatCurrency(parseFloat(invoice.total) || 0)}`,
-            userId: cashier?.id || 'system',
-            userName: cashier?.name || 'Sistema',
-            userRole: cashier?.role || 'CASHIER',
+            userId: invoiceActor.id,
+            userName: invoiceActor.name,
+            userRole: invoiceActor.role,
             timestamp: new Date(invoice.created_at),
           })
         })
@@ -394,7 +432,7 @@ export default function AuditPage() {
     const csvContent = [
       ['Fecha', 'Usuario', 'Rol', 'Acción', 'Módulo', 'Descripción'].join(','),
       ...filteredLogs.map(log => [
-        log.timestamp.toLocaleString('es-ES'),
+        log.timestamp.toLocaleString('es-CO', { timeZone: 'America/Bogota' }),
         log.userName,
         roleLabels[log.userRole] || log.userRole,
         actionLabels[log.action] || log.action,

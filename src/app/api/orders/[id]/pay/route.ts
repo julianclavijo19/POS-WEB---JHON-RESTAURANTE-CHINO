@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { cookies } from 'next/headers'
 
 export const dynamic = 'force-dynamic'
 
@@ -56,6 +57,39 @@ export async function POST(
       discount_type,
       split_payments // Array of {method, amount} for split payments
     } = body
+
+    // Detectar usuario que procesa el pago (body o cookie de sesión)
+    let actorUserId: string | null = null
+    if (typeof body.user_id === 'string' && body.user_id.trim()) {
+      actorUserId = body.user_id.trim()
+    } else if (typeof body.userId === 'string' && body.userId.trim()) {
+      actorUserId = body.userId.trim()
+    } else {
+      try {
+        const cookieStore = await cookies()
+        const sessionCookie = cookieStore.get('session')
+        if (sessionCookie?.value) {
+          const sessionData = JSON.parse(decodeURIComponent(sessionCookie.value))
+          if (typeof sessionData?.id === 'string' && sessionData.id.trim()) {
+            actorUserId = sessionData.id.trim()
+          }
+        }
+      } catch (e) {
+        console.warn('No se pudo resolver actor de pago desde cookie de sesión')
+      }
+    }
+
+    if (actorUserId) {
+      const { data: actorExists } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', actorUserId)
+        .maybeSingle()
+
+      if (!actorExists) {
+        actorUserId = null
+      }
+    }
 
     // Obtener la orden
     const { data: order, error: orderError } = await supabase
@@ -156,6 +190,7 @@ export async function POST(
           discount: discount,
           discount_type: discount_type,
           total: finalAmount,
+          paid_by: actorUserId,
           paid_at: new Date().toISOString(),
           payment_method: 'SPLIT', // Mark as split payment
           updated_at: new Date().toISOString() 
@@ -274,6 +309,7 @@ export async function POST(
         discount: discount,
         discount_type: discount_type,
         total: finalAmount,
+        paid_by: actorUserId,
         paid_at: new Date().toISOString(),
         payment_method: paymentMethod.toUpperCase(),
         updated_at: new Date().toISOString() 

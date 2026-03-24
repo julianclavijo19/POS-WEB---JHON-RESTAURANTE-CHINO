@@ -31,8 +31,26 @@ export default function TurnosPage() {
   const [handoverTo, setHandoverTo] = useState('')
   const [cashiers, setCashiers] = useState<any[]>([])
   const [processing, setProcessing] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
+    const getCookie = (name: string) => {
+      const value = `; ${document.cookie}`
+      const parts = value.split(`; ${name}=`)
+      if (parts.length === 2) return parts.pop()?.split(';').shift()
+      return null
+    }
+
+    const sessionCookie = getCookie('session')
+    if (sessionCookie) {
+      try {
+        const sessionData = JSON.parse(decodeURIComponent(sessionCookie))
+        if (sessionData?.id) setUserId(sessionData.id)
+      } catch (e) {
+        console.error('Error parsing session:', e)
+      }
+    }
+
     fetchShiftData()
     fetchCashiers()
   }, [])
@@ -100,14 +118,19 @@ export default function TurnosPage() {
       return
     }
 
+    if (!userId) {
+      toast.error('Usuario no identificado')
+      return
+    }
+
     setProcessing(true)
     try {
       const res = await fetch('/api/cajero/turno', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'open',
-          initialFund: Number(initialFund)
+          opening_amount: Number(initialFund),
+          user_id: userId
         })
       })
 

@@ -350,7 +350,7 @@ export function generateInvoiceHTML(
   let paymentHtml = ''
   if (order.paymentMethod) {
     const method = methodNames[order.paymentMethod] || order.paymentMethod
-    paymentHtml = `<div class="divider-dashed"></div><table class="totals-table">`
+    paymentHtml = `<div class="divider"></div><table class="totals-table">`
     if (
       (order.paymentMethod === 'cash' || order.paymentMethod === 'CASH') &&
       order.receivedAmount
@@ -375,7 +375,7 @@ ${logoHtml}
   <div class="rest-name">${config.restaurantName.toUpperCase()}</div>
   ${headerDetails}
 </div>
-<div class="divider-thick"></div>
+
 <div class="invoice-title">FACTURA DE VENTA</div>
 <div class="info-row">
   <span>No: <b>${invNumber}</b></span>
@@ -386,9 +386,10 @@ ${logoHtml}
   ${order.customerCount && order.customerCount > 1 ? `<span>Comensales: ${order.customerCount}</span>` : ''}
 </div>
 ${mesaLine}
-<div class="divider-thin"></div>
+
+<div class="divider"></div>
 ${customerBlock}
-<div class="divider-dashed"></div>
+
 <table class="items-table">
   <thead>
     <tr>
@@ -402,7 +403,8 @@ ${customerBlock}
     ${itemRows}
   </tbody>
 </table>
-<div class="divider-dashed"></div>
+
+<div class="divider"></div>
 <table class="totals-table">
   <tbody>
     ${subtotalRow}
@@ -411,7 +413,7 @@ ${customerBlock}
     ${tipRow}
   </tbody>
 </table>
-<div class="divider-thick"></div>
+
 <table class="totals-table">
   <tbody>
     <tr class="total-final-row">
@@ -420,7 +422,7 @@ ${customerBlock}
     </tr>
   </tbody>
 </table>
-<div class="divider-thick"></div>
+
 ${paymentHtml}
 ${footerHtml}
 <div class="spacer"></div>
@@ -459,83 +461,73 @@ export function getInvoiceReceiptStyles(paperWidth: string): string {
         object-fit: contain;
       }
       /* Header */
-      .header-block { text-align: center; margin-bottom: 3px; }
+      .header-block { text-align: center; margin-bottom: 5px; }
       .rest-name {
-        font-size: 15px;
+        font-size: 16px;
         font-weight: 900;
         letter-spacing: 0.5px;
         line-height: 1.2;
-        margin-bottom: 2px;
+        margin-bottom: 4px;
       }
-      .header-info { font-size: 10px; line-height: 1.4; }
+      .header-info { font-size: 11px; line-height: 1.4; color: #111; }
       /* Dividers */
-      .divider-thick {
+      .divider {
         border: none;
-        border-top: 3px double #000;
-        margin: 4px 0;
-      }
-      .divider-thin {
-        border: none;
-        border-top: 1px solid #000;
-        margin: 3px 0;
-      }
-      .divider-dashed {
-        border: none;
-        border-top: 1px dashed #000;
-        margin: 4px 0;
+        border-top: 1px solid #111;
+        margin: 6px 0;
       }
       /* Invoice title */
       .invoice-title {
         text-align: center;
-        font-size: 13px;
+        font-size: 14px;
         font-weight: 900;
         letter-spacing: 1px;
-        margin: 3px 0 4px;
+        margin: 6px 0;
       }
       /* Info rows (order #, date, mesa) */
       .info-row {
         display: flex;
         justify-content: space-between;
-        font-size: 10px;
-        margin: 1px 0;
+        font-size: 11px;
+        margin: 2px 0;
       }
       /* Customer block */
-      .customer-block { margin: 3px 0; }
-      .customer-label { font-size: 9px; text-transform: uppercase; color: #444; }
+      .customer-block { margin: 4px 0 6px 0; }
+      .customer-label { font-size: 10px; text-transform: uppercase; color: #444; }
       .customer-name { font-size: 12px; font-weight: 700; margin-top: 1px; }
-      .customer-sub { font-size: 10px; color: #333; }
+      .customer-sub { font-size: 11px; color: #333; }
       /* Items table */
       .items-table {
         width: 100%;
         border-collapse: collapse;
-        margin: 0;
+        margin: 4px 0;
       }
       .items-table thead tr {
-        border-bottom: 1px solid #000;
+        border-bottom: 1px solid #111;
       }
       .items-table th {
-        font-size: 9px;
+        font-size: 10px;
         font-weight: 900;
         text-transform: uppercase;
-        padding: 2px 1px;
+        padding: 4px 1px;
       }
       .th-product { text-align: left; width: 44%; }
       .th-unit    { text-align: right; width: 22%; }
       .th-qty     { text-align: center; width: 10%; }
       .th-total   { text-align: right; width: 24%; }
-      .items-table td { font-size: 11px; padding: 2px 1px; vertical-align: top; }
+      .items-table td { font-size: 11px; padding: 4px 1px; vertical-align: top; }
       .td-product { text-align: left; }
       .td-unit    { text-align: right; }
       .td-qty     { text-align: center; }
       .td-total   { text-align: right; font-weight: 700; }
-      .item-note  { font-size: 9px; font-style: italic; color: #555; }
+      .item-note  { font-size: 10px; font-style: italic; color: #555; }
       /* Totals table */
-      .totals-table { width: 100%; border-collapse: collapse; margin: 3px 0; }
-      .td-label   { text-align: right; font-size: 11px; padding: 1px 1px; color: #333; }
-      .td-amount  { text-align: right; font-size: 11px; padding: 1px 1px; font-weight: 700; width: 35%; }
+      .totals-table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+      .td-label   { text-align: right; font-size: 11px; padding: 2px 1px; color: #222; }
+      .td-amount  { text-align: right; font-size: 11px; padding: 2px 1px; font-weight: 700; width: 35%; }
       .td-discount { color: #000; }
       /* Grand total */
-      .total-final-row td { padding: 3px 1px; }
+      .total-final-row td { padding: 5px 1px; }
       .td-total-label {
         text-align: right;
         font-size: 15px;
@@ -551,11 +543,12 @@ export function getInvoiceReceiptStyles(paperWidth: string): string {
       /* Footer */
       .footer-text {
         text-align: center;
-        font-size: 10px;
-        margin-top: 6px;
-        border-top: 1px dashed #000;
-        padding-top: 5px;
+        font-size: 11px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #111;
         line-height: 1.5;
+        font-weight: 700;
       }
       .spacer { height: 12px; }
       /* Screen preview */

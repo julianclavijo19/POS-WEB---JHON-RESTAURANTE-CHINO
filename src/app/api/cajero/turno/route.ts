@@ -138,7 +138,91 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { opening_amount, user_id } = body
+    const openingAmountRaw = body?.opening_amount ?? body?.initialFund ?? 0
+    const openingAmount = Number(openingAmountRaw)
+    let sessionEmail: string | null = null
+
+    // Compatibilidad: si no llega user_id en body, usar cookie de sesión.
+    let userId: string | null = typeof body?.user_id === 'string' ? body.user_id : null
+    if (!userId) {
+      const cookieStore = await cookies()
+      const sessionCookie = cookieStore.get('session')
+      if (sessionCookie?.value) {
+        try {
+          const session = JSON.parse(decodeURIComponent(sessionCookie.value))
+          userId = typeof session?.id === 'string' ? session.id : null
+          sessionEmail = typeof session?.email === 'string' ? session.email : null
+        } catch (e) {
+          console.error('Error parsing session in POST /api/cajero/turno:', e)
+        }
+      }
+    }
+
+    if (!Number.isFinite(openingAmount) || openingAmount < 0) {
+      return NextResponse.json(
+        { error: 'Monto de apertura inválido' },
+        { status: 400 }
+      )
+    }
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Usuario no identificado para abrir turno' },
+        { status: 401 }
+      )
+    }
+
+    // Validar que el usuario exista y esté activo. Si el id de sesión está desactualizado,
+    // intentar resolver por email para no romper perfiles de prueba restaurados.
+    const { data: existingUserById, error: userByIdError } = await supabase
+      .from('users')
+      .select('id, is_active')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (userByIdError) {
+      console.error('Error validando usuario por id al abrir turno:', userByIdError)
+    }
+
+    if (!existingUserById && sessionEmail) {
+      const { data: existingUserByEmail, error: userByEmailError } = await supabase
+        .from('users')
+        .select('id, is_active')
+        .eq('email', sessionEmail)
+        .maybeSingle()
+
+      if (userByEmailError) {
+        console.error('Error validando usuario por email al abrir turno:', userByEmailError)
+      }
+
+      if (existingUserByEmail?.id) {
+        userId = existingUserByEmail.id
+      }
+    }
+
+    const { data: finalUser, error: finalUserError } = await supabase
+      .from('users')
+      .select('id, is_active')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (finalUserError) {
+      console.error('Error validando usuario final al abrir turno:', finalUserError)
+    }
+
+    if (!finalUser) {
+      return NextResponse.json(
+        { error: 'El usuario de la sesión no existe. Cierre sesión e ingrese de nuevo.' },
+        { status: 401 }
+      )
+    }
+
+    if (finalUser.is_active === false) {
+      return NextResponse.json(
+        { error: 'El usuario está inactivo. Contacte al administrador.' },
+        { status: 403 }
+      )
+    }
 
     // Verificar que no haya turno abierto
     const { data: existingShift } = await supabase
@@ -159,8 +243,8 @@ export async function POST(request: Request) {
     const { data: newShift, error } = await supabase
       .from('cash_registers')
       .insert({
-        user_id: user_id,
-        opening_amount: opening_amount || 0,
+        user_id: userId,
+        opening_amount: openingAmount,
         status: 'OPEN',
         register_type: 'RESTAURANT',
         opened_at: new Date().toISOString()
@@ -168,7 +252,13 @@ export async function POST(request: Request) {
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Error Supabase creando turno:', error)
+      return NextResponse.json(
+        { error: 'No se pudo abrir el turno. Verifique el usuario de sesión.' },
+        { status: 400 }
+      )
+    }
 
     return NextResponse.json({
       success: true,

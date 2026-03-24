@@ -23,6 +23,17 @@ interface OrderItem {
   product: { id: string; name: string; price: number }
 }
 
+interface CartItem {
+  id: string
+  product: { id: string; name: string; price: number }
+  quantity: number
+  notes: string
+  comensal?: number
+  priority: 'normal' | 'urgent'
+  sentToKitchen: boolean
+  tiempo?: 'entrada' | 'plato_fuerte' | 'postre'
+}
+
 interface ProductOption {
   id: string
   name: string
@@ -72,9 +83,7 @@ export default function ComandaDetailCajeroPage() {
     discountType: 'percent' as 'percent' | 'fixed',
     receivedAmount: 0
   })
-  const [selectedProduct, setSelectedProduct] = useState<string>('')
-  const [newItemQty, setNewItemQty] = useState(1)
-  const [newItemNotes, setNewItemNotes] = useState('')
+  const [addCart, setAddCart] = useState<CartItem[]>([])
   const [editingItem, setEditingItem] = useState<string | null>(null)
   const [editQty, setEditQty] = useState(1)
   const [editNotes, setEditNotes] = useState('')
@@ -291,17 +300,74 @@ export default function ComandaDetailCajeroPage() {
     }
   }
 
+  const addToCart = (product: { id: string; name: string; price: number }) => {
+    const itemId = `${product.id}-${Date.now()}`
+    setAddCart((prev) => {
+      const existing = prev.find((item) => item.product.id === product.id && !item.notes)
+      if (existing) {
+        return prev.map((item) =>
+          item.id === existing.id
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        )
+      }
+      return [...prev, {
+        id: itemId,
+        product,
+        quantity: 1,
+        notes: '',
+        priority: 'normal',
+        sentToKitchen: false
+      }]
+    })
+  }
+
+  const updateQuantity = (itemId: string, delta: number) => {
+    setAddCart((prev) =>
+      prev
+        .map((item) =>
+          item.id === itemId
+            ? { ...item, quantity: Math.max(0, item.quantity + delta) }
+            : item
+        )
+        .filter((item) => item.quantity > 0)
+    )
+  }
+
+  const updateNewItemNotes = (itemId: string, notes: string) => {
+    setAddCart((prev) =>
+      prev.map((item) =>
+        item.id === itemId ? { ...item, notes } : item
+      )
+    )
+  }
+
+  const updateItemPriority = (itemId: string, priority: 'normal' | 'urgent') => {
+    setAddCart((prev) =>
+      prev.map((item) =>
+        item.id === itemId ? { ...item, priority } : item
+      )
+    )
+  }
+
+  const removeFromCart = (itemId: string) => {
+    setAddCart((prev) => prev.filter((item) => item.id !== itemId))
+  }
+
   const addItem = async (printCorrection = false) => {
-    if (!selectedProduct) return
-    const product = products.find(p => p.id === selectedProduct)
-    if (!product) return
+    if (addCart.length === 0) return
 
     try {
+      const formattedItems = addCart.map((item) => ({
+        product_id: item.product.id,
+        quantity: item.quantity,
+        unit_price: item.product.price,
+        notes: item.notes,
+        priority: item.priority
+      }))
+
       const payload: Record<string, any> = {
-        product_id: selectedProduct,
-        quantity: newItemQty,
-        unit_price: product.price,
-        notes: newItemNotes
+        items: formattedItems
       }
 
       if (printCorrection && order) {
@@ -311,11 +377,11 @@ export default function ComandaDetailCajeroPage() {
           orderNumber: order.orderNumber,
           mesa: order.table?.name || 'Caja',
           mesero: order.waiter?.name || 'Caja',
-          items: [{
-            nombre: product.name,
-            cantidad: newItemQty,
-            notas: newItemNotes
-          }]
+          items: addCart.map((item) => ({
+            nombre: item.product.name,
+            cantidad: item.quantity,
+            notas: item.notes
+          }))
         }
       }
 
@@ -328,9 +394,7 @@ export default function ComandaDetailCajeroPage() {
         toast.success(printCorrection ? 'Agregado e impresión en cola' : 'Agregado')
 
         setShowAddItem(false)
-        setSelectedProduct('')
-        setNewItemQty(1)
-        setNewItemNotes('')
+        setAddCart([])
         fetchOrder()
       }
     } catch (error) {
@@ -596,101 +660,141 @@ export default function ComandaDetailCajeroPage() {
 
       {showAddItem && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-3xl">
-            <CardHeader className="border-b">
+          <Card className="w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden">
+            <CardHeader className="border-b shrink-0 py-3">
               <div className="flex items-center justify-between">
-                <CardTitle>Agregar Item</CardTitle>
-                <button onClick={() => setShowAddItem(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                <CardTitle>Agregar Items</CardTitle>
+                <button onClick={() => { setShowAddItem(false); setAddCart([]) }} className="text-gray-400 hover:text-gray-600">✕</button>
               </div>
             </CardHeader>
-            <CardContent className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Buscar producto</label>
-                <input
-                  type="text"
-                  value={addProductSearch}
-                  onChange={(e) => setAddProductSearch(e.target.value)}
-                  placeholder="Escribe para buscar..."
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
-                />
-              </div>
-
-              {!addProductSearch && categories.length > 0 && (
-                <div className="flex overflow-x-auto gap-2 pb-1">
-                  {categories.map((category) => (
-                    <button
-                      key={category.id}
-                      type="button"
-                      onClick={() => setSelectedCategory(category.id)}
-                      className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium border transition-colors ${
-                        selectedCategory === category.id
-                          ? 'text-white border-transparent'
-                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100'
-                      }`}
-                      style={{
-                        backgroundColor: selectedCategory === category.id
-                          ? (category.color || '#111827')
-                          : undefined,
-                      }}
-                    >
-                      {category.name}
-                    </button>
-                  ))}
+            <CardContent className="p-0 flex-1 overflow-hidden flex flex-col lg:flex-row">
+              {/* Productos */}
+              <div className="w-full lg:w-2/3 p-4 flex flex-col h-1/2 lg:h-full border-b lg:border-b-0 lg:border-r border-gray-100">
+                <div className="mb-4 shrink-0">
+                  <input
+                    type="text"
+                    value={addProductSearch}
+                    onChange={(e) => setAddProductSearch(e.target.value)}
+                    placeholder="Buscar producto..."
+                    className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  />
                 </div>
-              )}
 
-              <div>
-                <label className="block text-sm text-gray-600 mb-2">Producto</label>
-                <div className="border rounded-lg overflow-hidden">
-                  <div className="max-h-56 overflow-y-auto divide-y">
+                {!addProductSearch && categories.length > 0 && (
+                  <div className="flex overflow-x-auto gap-2 pb-2 mb-2 shrink-0">
+                    {categories.map((category) => (
+                      <button
+                        key={category.id}
+                        type="button"
+                        onClick={() => setSelectedCategory(category.id)}
+                        className={`px-4 py-2 rounded-lg whitespace-nowrap text-sm font-medium transition-colors shrink-0 ${
+                          selectedCategory === category.id
+                            ? 'bg-gray-900 text-white'
+                            : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {category.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex-1 overflow-y-auto pr-2 pb-16 lg:pb-0">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 pt-4">
                     {addModalProducts.map((product) => {
-                      const isSelected = selectedProduct === product.id
+                      const cartItem = addCart.find(item => item.product.id === product.id)
+                      const qty = cartItem ? cartItem.quantity : 0
                       return (
-                        <button
+                        <div
                           key={product.id}
-                          type="button"
-                          onClick={() => setSelectedProduct(product.id)}
-                          className={`w-full text-left px-3 py-2 transition-colors ${
-                            isSelected ? 'bg-gray-900 text-white' : 'hover:bg-gray-50'
-                          }`}
+                          className={`cursor-pointer border rounded-lg p-3 hover:shadow-md transition-all active:scale-95 relative ${qty > 0 ? 'ring-2 ring-gray-900 bg-gray-50' : 'bg-white'}`}
+                          onClick={() => addToCart(product)}
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="font-medium">{product.name}</span>
-                            <span className={isSelected ? 'text-gray-200' : 'text-gray-600'}>{formatCurrency(product.price)}</span>
-                          </div>
-                        </button>
+                          {qty > 0 && (
+                            <span className="absolute -top-2 -right-2 bg-gray-900 text-white text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center z-10">
+                              {qty}
+                            </span>
+                          )}
+                          <h3 className="font-medium text-gray-900 text-sm line-clamp-2">{product.name}</h3>
+                          <p className="text-gray-900 font-semibold mt-1">
+                            {formatCurrency(product.price)}
+                          </p>
+                        </div>
                       )
                     })}
-                    {addModalProducts.length === 0 && (
-                      <div className="px-3 py-6 text-center text-sm text-gray-500">
-                        No hay productos para mostrar
-                      </div>
-                    )}
                   </div>
+                  {addModalProducts.length === 0 && (
+                    <div className="py-6 text-center text-sm text-gray-500">
+                      No hay productos para mostrar
+                    </div>
+                  )}
                 </div>
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Cantidad</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={newItemQty}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '')
-                    setNewItemQty(Math.max(1, parseInt(val) || 1))
-                  }}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">Notas</label>
-                <input type="text" value={newItemNotes} onChange={(e) => setNewItemNotes(e.target.value)} placeholder="Notas..." className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900" />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" className="flex-1" onClick={() => setShowAddItem(false)}>Cancelar</Button>
-                <Button variant="outline" className="flex-1" onClick={() => addItem(false)} disabled={!selectedProduct}>Sin imprimir</Button>
-                <Button className="flex-1 bg-gray-900 hover:bg-gray-800 text-white" onClick={() => addItem(true)} disabled={!selectedProduct}>Agregar e imprimir</Button>
+
+              {/* Nuevos Items Cart */}
+              <div className="w-full lg:w-1/3 flex flex-col h-1/2 lg:h-full bg-gray-50">
+                <div className="p-3 border-b bg-white shrink-0 flex justify-between items-center">
+                  <h3 className="font-medium">Nuevos Items</h3>
+                  <span className="text-sm text-gray-500">{addCart.length} items</span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                  {addCart.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8 text-sm">
+                      Selecciona productos para agregar
+                    </p>
+                  ) : (
+                    addCart.map((item) => (
+                      <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm text-gray-900 truncate">{item.product.name}</p>
+                            <p className="text-gray-600 text-sm">{formatCurrency(item.product.price * item.quantity)}</p>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button onClick={() => updateQuantity(item.id, -1)} className="p-1 hover:bg-gray-100 rounded">
+                              <Minus className="h-4 w-4 text-gray-600" />
+                            </button>
+                            <span className="w-6 text-center font-medium text-sm">{item.quantity}</span>
+                            <button onClick={() => updateQuantity(item.id, 1)} className="p-1 hover:bg-gray-100 rounded">
+                              <Plus className="h-4 w-4 text-gray-600" />
+                            </button>
+                            <button onClick={() => removeFromCart(item.id)} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="mt-2 space-y-2">
+                          <input
+                            type="text"
+                            placeholder="Notas especiales..."
+                            value={item.notes}
+                            onChange={(e) => updateNewItemNotes(item.id, e.target.value)}
+                            className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-gray-900"
+                          />
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="p-4 bg-white border-t shrink-0">
+                  <div className="flex justify-between items-center text-lg font-semibold mb-4">
+                    <span>Total a agregar</span>
+                    <span>{formatCurrency(addCart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0))}</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1" onClick={() => { setShowAddItem(false); setAddCart([]) }}>
+                        Cancelar
+                      </Button>
+                      <Button onClick={() => addItem(false)} disabled={addCart.length === 0} className="bg-gray-900 hover:bg-gray-800 text-white flex-1">
+                        Sin imprimir
+                      </Button>
+                    </div>
+                    <Button onClick={() => addItem(true)} disabled={addCart.length === 0} className="bg-gray-900 hover:bg-gray-800 text-white w-full">
+                      Agregar e imprimir
+                    </Button>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

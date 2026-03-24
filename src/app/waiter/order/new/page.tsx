@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Button, Card, CardContent, Input, Badge, Modal } from '@/components/ui'
@@ -54,6 +54,17 @@ export default function NewOrderPage() {
   const [showNotesModal, setShowNotesModal] = useState(false)
   const [selectedItemForNotes, setSelectedItemForNotes] = useState<number | null>(null)
   const [itemNotes, setItemNotes] = useState('')
+  const lastAddAtRef = useRef<Record<string, number>>({})
+
+  const shouldIgnoreRapidAdd = (productId: string): boolean => {
+    const now = Date.now()
+    const lastAddAt = lastAddAtRef.current[productId] || 0
+    if (now - lastAddAt < 350) {
+      return true
+    }
+    lastAddAtRef.current[productId] = now
+    return false
+  }
 
   useEffect(() => {
     fetchCategories()
@@ -91,6 +102,10 @@ export default function NewOrderPage() {
   }
 
   const addToCart = (product: Product) => {
+    if (shouldIgnoreRapidAdd(product.id)) {
+      return
+    }
+
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id)
       if (existing) {
@@ -163,20 +178,17 @@ export default function NewOrderPage() {
         }),
       })
 
-      if (!orderRes.ok) throw new Error('Error creating order')
-      const order = await orderRes.json()
+      if (!orderRes.ok) {
+        const errJson = await orderRes.json().catch(() => null)
+        throw new Error(errJson?.error || 'Error creating order')
+      }
+      await orderRes.json()
 
-      // Enviar a cocina
-      const kitchenRes = await fetch(`/api/orders/${order.id}/send-to-kitchen`, {
-        method: 'POST',
-      })
-
-      if (!kitchenRes.ok) throw new Error('Error sending to kitchen')
-      // La comanda se encola en send-to-kitchen; el print-server la imprime por polling
+      // La comanda se encola al crear la orden; evita doble impresión en cocina.
       toast.success('¡Pedido enviado a cocina!')
       router.push('/waiter')
-    } catch (error) {
-      toast.error('Error al enviar pedido')
+    } catch (error: any) {
+      toast.error(error?.message || 'Error al enviar pedido')
       console.error(error)
     } finally {
       setSending(false)

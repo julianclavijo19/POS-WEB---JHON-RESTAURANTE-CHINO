@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils'
@@ -56,6 +56,17 @@ function NuevaComandaContent() {
   const [customerCount, setCustomerCount] = useState(1)
   const [isDraft, setIsDraft] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
+  const lastAddAtRef = useRef<Record<string, number>>({})
+
+  const shouldIgnoreRapidAdd = (productId: string): boolean => {
+    const now = Date.now()
+    const lastAddAt = lastAddAtRef.current[productId] || 0
+    if (now - lastAddAt < 350) {
+      return true
+    }
+    lastAddAtRef.current[productId] = now
+    return false
+  }
 
   useEffect(() => {
     const getCookie = (name: string) => {
@@ -142,6 +153,10 @@ function NuevaComandaContent() {
   }
 
   const addToCart = (product: Product) => {
+    if (shouldIgnoreRapidAdd(product.id)) {
+      return
+    }
+
     const itemId = `${product.id}-${Date.now()}`
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id && !item.sentToKitchen && !item.notes)

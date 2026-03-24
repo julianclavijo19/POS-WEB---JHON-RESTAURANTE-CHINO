@@ -23,6 +23,19 @@ interface OrderItem {
   product: { id: string; name: string; price: number }
 }
 
+interface ProductOption {
+  id: string
+  name: string
+  price: number
+}
+
+interface ProductCategory {
+  id: string
+  name: string
+  color?: string
+  products: ProductOption[]
+}
+
 interface Order {
   id: string
   orderNumber: string | number
@@ -50,7 +63,10 @@ export default function ComandaDetailPage() {
   const [loading, setLoading] = useState(true)
   const [showAddItem, setShowAddItem] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<ProductOption[]>([])
+  const [categories, setCategories] = useState<ProductCategory[]>([])
+  const [selectedCategory, setSelectedCategory] = useState<string>('')
+  const [addProductSearch, setAddProductSearch] = useState('')
   const [paymentData, setPaymentData] = useState({
     method: 'cash',
     tip: 0,
@@ -72,10 +88,19 @@ export default function ComandaDetailPage() {
       return
     }
     fetchOrder()
-    fetchProducts()
+    fetchProductCatalog()
     const interval = setInterval(fetchOrder, 10000)
     return () => clearInterval(interval)
   }, [orderId, router])
+
+  useEffect(() => {
+    if (showAddItem) {
+      setAddProductSearch('')
+      if (!selectedCategory && categories.length > 0) {
+        setSelectedCategory(categories[0].id)
+      }
+    }
+  }, [showAddItem, categories, selectedCategory])
 
   const fetchOrder = async () => {
     try {
@@ -91,10 +116,28 @@ export default function ComandaDetailPage() {
     }
   }
 
-  const fetchProducts = async () => {
+  const fetchProductCatalog = async () => {
     try {
-      const res = await fetch('/api/products')
-      if (res.ok) setProducts(await res.json())
+      const res = await fetch('/api/categories?includeProducts=true')
+      if (!res.ok) return
+
+      const data = await res.json()
+      const normalizedCategories: ProductCategory[] = (Array.isArray(data) ? data : []).map((category: any) => ({
+        id: category.id,
+        name: category.name,
+        color: category.color,
+        products: (category.products || []).map((product: any) => ({
+          id: product.id,
+          name: product.name,
+          price: Number(product.price) || 0,
+        })),
+      }))
+
+      setCategories(normalizedCategories)
+      setProducts(normalizedCategories.flatMap((category) => category.products))
+      if (normalizedCategories.length > 0) {
+        setSelectedCategory(normalizedCategories[0].id)
+      }
     } catch (error) {
       console.error('Error:', error)
     }
@@ -378,6 +421,16 @@ export default function ComandaDetailPage() {
   const finalTotal = calculateFinalTotal()
   const changeAmount = paymentData.method === 'cash' && paymentData.receivedAmount > finalTotal
     ? paymentData.receivedAmount - finalTotal : 0
+
+  const selectedCategoryProducts = selectedCategory
+    ? categories.find((category) => category.id === selectedCategory)?.products || []
+    : products
+
+  const addModalProducts = addProductSearch.trim()
+    ? products.filter((product) =>
+      product.name.toLowerCase().includes(addProductSearch.toLowerCase())
+    )
+    : selectedCategoryProducts
 
   // Normalizar el status a minúsculas para comparaciones
   const normalizeStatus = (status: string) => status?.toLowerCase() || 'pending'
@@ -672,7 +725,7 @@ export default function ComandaDetailPage() {
 
       {showAddItem && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md">
+          <Card className="w-full max-w-3xl">
             <CardHeader className="border-b">
               <div className="flex items-center justify-between">
                 <CardTitle>Agregar Item</CardTitle>
@@ -681,11 +734,69 @@ export default function ComandaDetailPage() {
             </CardHeader>
             <CardContent className="p-4 space-y-4">
               <div>
-                <label className="block text-sm text-gray-600 mb-1">Producto</label>
-                <select value={selectedProduct} onChange={(e) => setSelectedProduct(e.target.value)} className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900">
-                  <option value="">Seleccionar...</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name} - {formatCurrency(p.price)}</option>)}
-                </select>
+                <label className="block text-sm text-gray-600 mb-1">Buscar producto</label>
+                <input
+                  type="text"
+                  value={addProductSearch}
+                  onChange={(e) => setAddProductSearch(e.target.value)}
+                  placeholder="Escribe para buscar..."
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
+                />
+              </div>
+
+              {!addProductSearch && categories.length > 0 && (
+                <div className="flex overflow-x-auto gap-2 pb-1">
+                  {categories.map((category) => (
+                    <button
+                      key={category.id}
+                      type="button"
+                      onClick={() => setSelectedCategory(category.id)}
+                      className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium border transition-colors ${
+                        selectedCategory === category.id
+                          ? 'text-white border-transparent'
+                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100'
+                      }`}
+                      style={{
+                        backgroundColor: selectedCategory === category.id
+                          ? (category.color || '#111827')
+                          : undefined,
+                      }}
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm text-gray-600 mb-2">Producto</label>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="max-h-56 overflow-y-auto divide-y">
+                    {addModalProducts.map((product) => {
+                      const isSelected = selectedProduct === product.id
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => setSelectedProduct(product.id)}
+                          className={`w-full text-left px-3 py-2 transition-colors ${
+                            isSelected ? 'bg-gray-900 text-white' : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="font-medium">{product.name}</span>
+                            <span className={isSelected ? 'text-gray-200' : 'text-gray-600'}>{formatCurrency(product.price)}</span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                    {addModalProducts.length === 0 && (
+                      <div className="px-3 py-6 text-center text-sm text-gray-500">
+                        No hay productos para mostrar
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
               <div>
                 <label className="block text-sm text-gray-600 mb-1">Cantidad</label>

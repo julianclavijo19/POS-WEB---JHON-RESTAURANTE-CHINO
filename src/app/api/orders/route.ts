@@ -6,6 +6,28 @@ import { getTaxRate } from '@/lib/tax'
 
 export const dynamic = 'force-dynamic'
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function sanitizeUuid(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null
+  return UUID_REGEX.test(trimmed) ? trimmed : null
+}
+
+function toErrorMessage(error: any): string {
+  if (!error) return 'Error desconocido'
+  if (typeof error === 'string') return error
+  if (error.message && typeof error.message === 'string') return error.message
+  if (error.details && typeof error.details === 'string') return error.details
+  if (error.hint && typeof error.hint === 'string') return error.hint
+  try {
+    return JSON.stringify(error)
+  } catch {
+    return 'Error desconocido'
+  }
+}
+
 // GET - Obtener órdenes
 export async function GET(request: Request) {
   try {
@@ -164,13 +186,87 @@ export async function POST(request: Request) {
 
     const { tableId, table_id, waiterId, waiter_id, orderType, notes, items } = body
 
-    const finalTableId = tableId || table_id
-    const finalWaiterId = waiterId || waiter_id
+    const finalTableId = sanitizeUuid(tableId || table_id)
+    const finalWaiterId = sanitizeUuid(waiterId || waiter_id)
 
-    console.log('📌 IDs:', { finalTableId, finalWaiterId, itemsCount: items?.length })
+    const rawItems = Array.isArray(items) ? items : []
+    if (rawItems.length === 0) {
+      return NextResponse.json(
+        { error: 'La orden debe incluir al menos un item válido' },
+        { status: 400 }
+      )
+    }
+
+    // Normalizar y consolidar líneas repetidas para evitar x2 por doble click/tap.
+    const normalizedItemsMap = new Map<string, {
+      productId: string
+      quantity: number
+      notes: string | null
+      priority?: string
+      tiempo?: string
+      comensal?: number
+    }>()
+
+    for (const rawItem of rawItems) {
+      const productId = rawItem.productId || rawItem.product_id
+      const parsedQuantity = Number(rawItem.quantity)
+      const quantity = Number.isFinite(parsedQuantity) ? Math.max(0, Math.floor(parsedQuantity)) : 0
+
+      if (!productId || quantity <= 0) {
+        continue
+      }
+
+      const notesValue = typeof rawItem.notes === 'string' ? rawItem.notes.trim() : ''
+      const priorityValue = typeof rawItem.priority === 'string' ? rawItem.priority : ''
+      const tiempoValue = typeof rawItem.tiempo === 'string' ? rawItem.tiempo : ''
+      const comensalValue = rawItem.comensal ?? ''
+      const mergeKey = `${productId}::${notesValue}::${priorityValue}::${tiempoValue}::${comensalValue}`
+
+      const existing = normalizedItemsMap.get(mergeKey)
+      if (existing) {
+        existing.quantity += quantity
+      } else {
+        normalizedItemsMap.set(mergeKey, {
+          productId,
+          quantity,
+          notes: notesValue || null,
+          priority: priorityValue || undefined,
+          tiempo: tiempoValue || undefined,
+          comensal: Number.isFinite(Number(comensalValue)) ? Number(comensalValue) : undefined,
+        })
+      }
+    }
+
+    const normalizedItems = Array.from(normalizedItemsMap.values())
+    if (normalizedItems.length === 0) {
+      return NextResponse.json(
+        { error: 'No hay items válidos para crear la orden' },
+        { status: 400 }
+      )
+    }
+
+    console.log('📌 IDs:', { finalTableId, finalWaiterId, itemsCount: normalizedItems.length, rawItemsCount: rawItems.length })
+
+    let resolvedWaiterId: string | null = finalWaiterId
+    if (finalWaiterId) {
+      const { data: waiterExists, error: waiterExistsError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', finalWaiterId)
+        .maybeSingle()
+
+      if (waiterExistsError) {
+        console.error('❌ Error validando waiter_id:', waiterExistsError)
+      }
+
+      if (!waiterExists) {
+        console.warn('⚠️ waiter_id inválido para FK, se omitirá en la orden:', finalWaiterId)
+        resolvedWaiterId = null
+      }
+    }
 
     // Obtener precios de productos - soportar ambos nombres de propiedades
-    const productIds = items.map((i: any) => i.productId || i.product_id)
+    const productIds = normalizedItems.map((i: any) => i.productId)
     console.log('🔍 Buscando productos:', productIds)
 
     const { data: products, error: productsError } = await supabase
@@ -183,12 +279,19 @@ export async function POST(request: Request) {
     }
     console.log('✓ Productos encontrados:', products?.length)
 
+    if (!products || products.length === 0) {
+      return NextResponse.json(
+        { error: 'No se encontraron productos válidos para la orden' },
+        { status: 400 }
+      )
+    }
+
     // Calcular totales
     let subtotal = 0
     const orderItems = []
 
-    for (const item of items) {
-      const productId = item.productId || item.product_id
+    for (const item of normalizedItems) {
+      const productId = item.productId
       const product = products?.find((p: any) => p.id === productId)
       if (product) {
         const itemSubtotal = Number(product.price) * item.quantity
@@ -201,6 +304,13 @@ export async function POST(request: Request) {
           notes: item.notes,
         })
       }
+    }
+
+    if (orderItems.length === 0) {
+      return NextResponse.json(
+        { error: 'No se pudieron procesar los items de la orden' },
+        { status: 400 }
+      )
     }
 
     console.log('💰 Subtotal calculado:', subtotal, 'Items:', orderItems.length)
@@ -221,7 +331,7 @@ export async function POST(request: Request) {
         .insert({
           order_number: orderNumber,
           table_id: finalTableId || null,
-          waiter_id: finalWaiterId || null,
+          waiter_id: resolvedWaiterId,
           type: orderType || 'DINE_IN',
           status: 'DELIVERED',
           notes,
@@ -246,7 +356,7 @@ export async function POST(request: Request) {
 
     if (orderError || !order) {
       console.error('❌ Error creando orden:', orderError)
-      throw orderError
+      throw new Error(toErrorMessage(orderError))
     }
     console.log('✓ Orden creada:', order.id)
 
@@ -262,7 +372,7 @@ export async function POST(request: Request) {
 
     if (itemsError) {
       console.error('❌ Error creando items:', itemsError)
-      throw itemsError
+      throw new Error(toErrorMessage(itemsError))
     }
     console.log('✓ Items creados:', itemsWithOrderId.length)
 
@@ -291,11 +401,11 @@ export async function POST(request: Request) {
 
     // Obtener nombre del mesero
     let waiterName = 'N/A'
-    if (finalWaiterId) {
+    if (resolvedWaiterId) {
       const { data: waiterData } = await supabase
         .from('users')
         .select('name')
-        .eq('id', finalWaiterId)
+        .eq('id', resolvedWaiterId)
         .single()
       if (waiterData) {
         waiterName = waiterData.name || 'N/A'
@@ -330,12 +440,29 @@ export async function POST(request: Request) {
         timeZone: 'America/Bogota',
       }),
     }
-    await supabase
+    const duplicateWindowIso = new Date(Date.now() - 20000).toISOString()
+    const { data: recentKitchenJobs, error: recentJobsError } = await supabase
       .from('print_queue')
-      .insert({ type: 'kitchen', payload: kitchenPrintPayload })
-      .then(({ error }) => {
-        if (error) console.error('Error encolando impresión:', error)
-      })
+      .select('id')
+      .eq('type', 'kitchen')
+      .contains('payload', { orderNumber: String(order.order_number) })
+      .gte('created_at', duplicateWindowIso)
+      .limit(1)
+
+    if (recentJobsError) {
+      console.error('Error validando duplicados de impresión:', recentJobsError)
+    }
+
+    if (!recentKitchenJobs || recentKitchenJobs.length === 0) {
+      await supabase
+        .from('print_queue')
+        .insert({ type: 'kitchen', payload: kitchenPrintPayload })
+        .then(({ error }) => {
+          if (error) console.error('Error encolando impresión:', error)
+        })
+    } else {
+      console.log('⚠️ Impresión kitchen omitida por posible duplicado reciente')
+    }
 
     // Obtener la orden completa para devolver al cliente
     const { data: fullOrder } = await supabase
@@ -356,8 +483,9 @@ export async function POST(request: Request) {
     }, { status: 201 })
   } catch (error) {
     console.error('Error creating order:', error)
+    const detailedMessage = toErrorMessage(error)
     return NextResponse.json(
-      { error: 'Error al crear orden' },
+      { error: `Error al crear orden: ${detailedMessage}` },
       { status: 500 }
     )
   }

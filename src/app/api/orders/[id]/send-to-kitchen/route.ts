@@ -118,12 +118,29 @@ export async function POST(
         timeZone: 'America/Bogota',
       }),
     }
-    await supabase
+    const duplicateWindowIso = new Date(Date.now() - 20000).toISOString()
+    const { data: recentKitchenJobs, error: recentJobsError } = await supabase
       .from('print_queue')
-      .insert({ type: 'kitchen', payload: kitchenPayload })
-      .then(({ error: eqErr }) => {
-        if (eqErr) console.error('Error encolando impresión:', eqErr)
-      })
+      .select('id')
+      .eq('type', 'kitchen')
+      .contains('payload', { orderNumber: String(order?.order_number || '') })
+      .gte('created_at', duplicateWindowIso)
+      .limit(1)
+
+    if (recentJobsError) {
+      console.error('Error validando duplicados de impresión:', recentJobsError)
+    }
+
+    if (!recentKitchenJobs || recentKitchenJobs.length === 0) {
+      await supabase
+        .from('print_queue')
+        .insert({ type: 'kitchen', payload: kitchenPayload })
+        .then(({ error: eqErr }) => {
+          if (eqErr) console.error('Error encolando impresión:', eqErr)
+        })
+    } else {
+      console.log('⚠️ Impresión kitchen omitida por posible duplicado reciente')
+    }
 
     console.log('✅ Enviando respuesta exitosa')
     return NextResponse.json(order)

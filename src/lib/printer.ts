@@ -140,7 +140,7 @@ export function saveLogoUrl(url: string | null): void {
   }
 }
 
-// Generar contenido del ticket de cuenta (para cliente)
+// Generar contenido del ticket de cuenta (para cliente) — versión texto plano (fallback)
 export function generateInvoiceTicket(order: OrderData): string {
   const config = getConfig()
   const width = config.paperWidth === 58 ? 32 : 42
@@ -148,7 +148,6 @@ export function generateInvoiceTicket(order: OrderData): string {
   const thickLine = '━'.repeat(width)
   const lines: string[] = []
 
-  // Header - Restaurant name prominent
   lines.push('')
   lines.push(centerText(config.restaurantName.toUpperCase(), width))
   if (config.nit) lines.push(centerText(`NIT: ${config.nit}`, width))
@@ -156,7 +155,6 @@ export function generateInvoiceTicket(order: OrderData): string {
   if (config.phone) lines.push(centerText(`Tel: ${config.phone}`, width))
   lines.push(thickLine)
 
-  // Order info
   const dateStr = new Date(order.createdAt || Date.now()).toLocaleString('es-CO', {
     day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
@@ -170,12 +168,9 @@ export function generateInvoiceTicket(order: OrderData): string {
     lines.push(`Atendido: ${order.waiterName}`)
   }
   lines.push(thinLine)
-
-  // Items header
   lines.push(leftRightText('CANT  PRODUCTO', 'PRECIO', width))
   lines.push(thinLine)
 
-  // Items
   order.items.forEach(item => {
     const qty = `${item.quantity}x`
     const price = formatPrice(item.quantity * item.unitPrice)
@@ -187,8 +182,6 @@ export function generateInvoiceTicket(order: OrderData): string {
   })
 
   lines.push(thinLine)
-
-  // Totals
   if (order.subtotal && order.subtotal !== order.total) {
     lines.push(leftRightText('  Subtotal', formatPrice(order.subtotal), width))
   }
@@ -205,7 +198,6 @@ export function generateInvoiceTicket(order: OrderData): string {
   lines.push(leftRightText('  TOTAL', formatPrice(order.total), width))
   lines.push(thickLine)
 
-  // Payment info
   if (order.paymentMethod) {
     const methodNames: Record<string, string> = {
       'cash': 'Efectivo', 'CASH': 'Efectivo',
@@ -223,15 +215,364 @@ export function generateInvoiceTicket(order: OrderData): string {
     }
   }
 
-  // Footer
   lines.push('')
-  if (config.footer) {
-    lines.push(centerText(config.footer, width))
-  }
+  if (config.footer) lines.push(centerText(config.footer, width))
   lines.push('')
   lines.push('')
 
   return lines.join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Datos extra opcionales para la factura HTML (número de factura, cliente)
+// ---------------------------------------------------------------------------
+export interface InvoiceExtras {
+  invoiceNumber?: string
+  customerName?: string
+  customerNit?: string
+  customerAddress?: string
+}
+
+// ---------------------------------------------------------------------------
+// Genera el HTML visual del recibo para impresión térmica 80 mm
+// ---------------------------------------------------------------------------
+export function generateInvoiceHTML(
+  order: OrderData,
+  extras?: InvoiceExtras,
+  overrideConfig?: Partial<TicketConfig>,
+  overrideLogoUrl?: string | null
+): string {
+  const config = { ...getConfig(), ...overrideConfig }
+  const logoUrl = overrideLogoUrl !== undefined ? overrideLogoUrl : getLogoUrl()
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(n)
+
+  const now = new Date(order.createdAt || Date.now())
+  const dateStr = now.toLocaleDateString('es-CO', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    timeZone: 'America/Bogota',
+  })
+  const timeStr = now.toLocaleTimeString('es-CO', {
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'America/Bogota',
+  })
+
+  const methodNames: Record<string, string> = {
+    cash: 'Efectivo', CASH: 'Efectivo',
+    card: 'Tarjeta', CARD: 'Tarjeta',
+    transfer: 'Transferencia', TRANSFER: 'Transferencia',
+    mixed: 'Mixto', SPLIT: 'Mixto',
+  }
+
+  // ------ Logo ------
+  const logoHtml = logoUrl
+    ? `<div class="logo-wrap"><img src="${logoUrl}" alt="Logo" /></div>`
+    : ''
+
+  // ------ Header info (NIT, address, phone) ------
+  const headerDetails = [
+    config.nit ? `NIT: ${config.nit}` : '',
+    config.address || '',
+    config.phone ? `Tel: ${config.phone}` : '',
+  ]
+    .filter(Boolean)
+    .map(l => `<div class="header-info">${l}</div>`)
+    .join('')
+
+  // ------ Invoice number / order / mesa ------
+  const invNumber = extras?.invoiceNumber
+    ? extras.invoiceNumber
+    : `ORD-${String(order.orderNumber).padStart(4, '0')}`
+
+  let mesaLine = ''
+  if (order.tableName) {
+    const waiterPart = order.waiterName ? `<span>${order.waiterName}</span>` : ''
+    mesaLine = `<div class="info-row"><span>Mesa: <b>${order.tableName}</b></span>${waiterPart}</div>`
+  } else if (order.waiterName) {
+    mesaLine = `<div class="info-row"><span>Atendido por: <b>${order.waiterName}</b></span></div>`
+  }
+
+  // ------ Customer ------
+  const customer = extras?.customerName || 'Consumidor Final'
+  const customerNit = extras?.customerNit || 'CF'
+  const customerAddress = extras?.customerAddress || ''
+  const customerBlock = `
+    <div class="section customer-block">
+      <div class="customer-label">Factura para:</div>
+      <div class="customer-name">${customer}</div>
+      <div class="customer-sub">NIT / CC: ${customerNit}</div>
+      ${customerAddress ? `<div class="customer-sub">${customerAddress}</div>` : ''}
+    </div>`
+
+  // ------ Items ------
+  const itemRows = order.items
+    .map(item => {
+      const unit = fmt(item.unitPrice)
+      const total = fmt(item.quantity * item.unitPrice)
+      const notesHtml = item.notes
+        ? `<div class="item-note">${item.notes}</div>`
+        : ''
+      return `
+      <tr>
+        <td class="td-product">${item.product.name}${notesHtml}</td>
+        <td class="td-unit">${unit}</td>
+        <td class="td-qty">${item.quantity}</td>
+        <td class="td-total">${total}</td>
+      </tr>`
+    })
+    .join('')
+
+  // ------ Totals ------
+  const showSubtotal = order.subtotal != null && order.subtotal !== order.total
+  const subtotalRow = showSubtotal
+    ? `<tr><td colspan="3" class="td-label">Subtotal</td><td class="td-amount">${fmt(order.subtotal!)}</td></tr>`
+    : ''
+  const discountRow =
+    order.discount && order.discount > 0
+      ? `<tr><td colspan="3" class="td-label">Descuento</td><td class="td-amount td-discount">- ${fmt(order.discount)}</td></tr>`
+      : ''
+  const taxRow =
+    order.tax && order.tax > 0
+      ? `<tr><td colspan="3" class="td-label">IVA</td><td class="td-amount">${fmt(order.tax)}</td></tr>`
+      : ''
+  const tipRow =
+    order.tip && order.tip > 0
+      ? `<tr><td colspan="3" class="td-label">Propina</td><td class="td-amount">${fmt(order.tip)}</td></tr>`
+      : ''
+
+  // ------ Payment ------
+  let paymentHtml = ''
+  if (order.paymentMethod) {
+    const method = methodNames[order.paymentMethod] || order.paymentMethod
+    paymentHtml = `<div class="divider-dashed"></div><table class="totals-table">`
+    if (
+      (order.paymentMethod === 'cash' || order.paymentMethod === 'CASH') &&
+      order.receivedAmount
+    ) {
+      paymentHtml += `
+        <tr><td colspan="3" class="td-label">Pago (${method})</td><td class="td-amount">${fmt(order.receivedAmount)}</td></tr>
+        <tr><td colspan="3" class="td-label">Cambio</td><td class="td-amount">${fmt(order.changeAmount || 0)}</td></tr>`
+    } else {
+      paymentHtml += `<tr><td colspan="4" class="td-label">Forma de pago: <b>${method}</b></td></tr>`
+    }
+    paymentHtml += `</table>`
+  }
+
+  // ------ Footer ------
+  const footerHtml = config.footer
+    ? `<div class="footer-text">${config.footer}</div>`
+    : ''
+
+  return `
+${logoHtml}
+<div class="header-block">
+  <div class="rest-name">${config.restaurantName.toUpperCase()}</div>
+  ${headerDetails}
+</div>
+<div class="divider-thick"></div>
+<div class="invoice-title">FACTURA DE VENTA</div>
+<div class="info-row">
+  <span>No: <b>${invNumber}</b></span>
+  <span>${dateStr}</span>
+</div>
+<div class="info-row">
+  <span>Hora: ${timeStr}</span>
+  ${order.customerCount && order.customerCount > 1 ? `<span>Comensales: ${order.customerCount}</span>` : ''}
+</div>
+${mesaLine}
+<div class="divider-thin"></div>
+${customerBlock}
+<div class="divider-dashed"></div>
+<table class="items-table">
+  <thead>
+    <tr>
+      <th class="th-product">Producto</th>
+      <th class="th-unit">P.Unit</th>
+      <th class="th-qty">Cant</th>
+      <th class="th-total">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${itemRows}
+  </tbody>
+</table>
+<div class="divider-dashed"></div>
+<table class="totals-table">
+  <tbody>
+    ${subtotalRow}
+    ${discountRow}
+    ${taxRow}
+    ${tipRow}
+  </tbody>
+</table>
+<div class="divider-thick"></div>
+<table class="totals-table">
+  <tbody>
+    <tr class="total-final-row">
+      <td colspan="3" class="td-total-label">TOTAL</td>
+      <td class="td-total-amount">${fmt(order.total)}</td>
+    </tr>
+  </tbody>
+</table>
+<div class="divider-thick"></div>
+${paymentHtml}
+${footerHtml}
+<div class="spacer"></div>
+`
+}
+
+// ---------------------------------------------------------------------------
+// CSS compartido para el recibo HTML (impresión térmica 80 mm)
+// ---------------------------------------------------------------------------
+export function getInvoiceReceiptStyles(paperWidth: string): string {
+  return `
+    <style>
+      @page {
+        size: ${paperWidth} auto;
+        margin: 0;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: 'Courier New', 'Lucida Console', monospace;
+        font-size: 12px;
+        width: ${paperWidth};
+        padding: 4mm 3mm 2mm;
+        background: #fff;
+        color: #000;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      /* Logo */
+      .logo-wrap {
+        text-align: center;
+        margin-bottom: 5px;
+      }
+      .logo-wrap img {
+        max-width: 58%;
+        max-height: 80px;
+        object-fit: contain;
+      }
+      /* Header */
+      .header-block { text-align: center; margin-bottom: 3px; }
+      .rest-name {
+        font-size: 15px;
+        font-weight: 900;
+        letter-spacing: 0.5px;
+        line-height: 1.2;
+        margin-bottom: 2px;
+      }
+      .header-info { font-size: 10px; line-height: 1.4; }
+      /* Dividers */
+      .divider-thick {
+        border: none;
+        border-top: 3px double #000;
+        margin: 4px 0;
+      }
+      .divider-thin {
+        border: none;
+        border-top: 1px solid #000;
+        margin: 3px 0;
+      }
+      .divider-dashed {
+        border: none;
+        border-top: 1px dashed #000;
+        margin: 4px 0;
+      }
+      /* Invoice title */
+      .invoice-title {
+        text-align: center;
+        font-size: 13px;
+        font-weight: 900;
+        letter-spacing: 1px;
+        margin: 3px 0 4px;
+      }
+      /* Info rows (order #, date, mesa) */
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 10px;
+        margin: 1px 0;
+      }
+      /* Customer block */
+      .customer-block { margin: 3px 0; }
+      .customer-label { font-size: 9px; text-transform: uppercase; color: #444; }
+      .customer-name { font-size: 12px; font-weight: 700; margin-top: 1px; }
+      .customer-sub { font-size: 10px; color: #333; }
+      /* Items table */
+      .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0;
+      }
+      .items-table thead tr {
+        border-bottom: 1px solid #000;
+      }
+      .items-table th {
+        font-size: 9px;
+        font-weight: 900;
+        text-transform: uppercase;
+        padding: 2px 1px;
+      }
+      .th-product { text-align: left; width: 44%; }
+      .th-unit    { text-align: right; width: 22%; }
+      .th-qty     { text-align: center; width: 10%; }
+      .th-total   { text-align: right; width: 24%; }
+      .items-table td { font-size: 11px; padding: 2px 1px; vertical-align: top; }
+      .td-product { text-align: left; }
+      .td-unit    { text-align: right; }
+      .td-qty     { text-align: center; }
+      .td-total   { text-align: right; font-weight: 700; }
+      .item-note  { font-size: 9px; font-style: italic; color: #555; }
+      /* Totals table */
+      .totals-table { width: 100%; border-collapse: collapse; margin: 3px 0; }
+      .td-label   { text-align: right; font-size: 11px; padding: 1px 1px; color: #333; }
+      .td-amount  { text-align: right; font-size: 11px; padding: 1px 1px; font-weight: 700; width: 35%; }
+      .td-discount { color: #000; }
+      /* Grand total */
+      .total-final-row td { padding: 3px 1px; }
+      .td-total-label {
+        text-align: right;
+        font-size: 15px;
+        font-weight: 900;
+        letter-spacing: 0.5px;
+      }
+      .td-total-amount {
+        text-align: right;
+        font-size: 15px;
+        font-weight: 900;
+        width: 35%;
+      }
+      /* Footer */
+      .footer-text {
+        text-align: center;
+        font-size: 10px;
+        margin-top: 6px;
+        border-top: 1px dashed #000;
+        padding-top: 5px;
+        line-height: 1.5;
+      }
+      .spacer { height: 12px; }
+      /* Screen preview */
+      @media screen {
+        body {
+          max-width: 320px;
+          margin: 0 auto;
+          border: 1px dashed #ccc;
+          padding: 10px;
+        }
+      }
+      @media print {
+        body { padding: 2mm; }
+        @page { size: ${paperWidth} auto; margin: 0; }
+      }
+    </style>
+  `
 }
 
 // Formatear precio
@@ -566,10 +907,94 @@ export async function printCorrectionTicket(data: CorrectionData): Promise<boole
   }
 }
 
-// Imprimir factura/ticket de pago
-export async function printInvoice(order: OrderData): Promise<boolean> {
-  const content = generateInvoiceTicket(order)
-  return printTicket(content, `Factura #${order.orderNumber}`, true)
+// ---------------------------------------------------------------------------
+// Imprime el HTML del recibo abriendo una ventana de impresión
+// ---------------------------------------------------------------------------
+export async function printHTMLTicket(
+  htmlBody: string,
+  title: string,
+  paperWidth: string = '80mm'
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      const printWindow = window.open('', '_blank', 'width=420,height=700')
+      if (!printWindow) {
+        console.error('No se pudo abrir la ventana de impresión. Verifica que los pop-ups estén permitidos.')
+        resolve(false)
+        return
+      }
+
+      const styles = getInvoiceReceiptStyles(paperWidth)
+
+      printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  ${styles}
+</head>
+<body>
+${htmlBody}
+<script>
+  window.onload = function() {
+    setTimeout(function() { window.print(); }, 150);
+  };
+  window.onafterprint = function() { window.close(); };
+<\/script>
+</body>
+</html>`)
+      printWindow.document.close()
+
+      setTimeout(() => {
+        try { if (printWindow && !printWindow.closed) printWindow.close() } catch (_) {}
+        resolve(true)
+      }, 12000)
+    } catch (error) {
+      console.error('Error al imprimir:', error)
+      resolve(false)
+    }
+  })
+}
+
+// Imprimir factura/ticket de pago — usa diseño HTML visual
+export async function printInvoice(order: OrderData, extras?: InvoiceExtras): Promise<boolean> {
+  const config = getConfig()
+  const paperWidth = config.paperWidth === 58 ? '58mm' : '80mm'
+
+  // Obtener logo: primero intenta localStorage, luego consulta la API para asegurar
+  // que el logo subido por el admin en Configuración siempre aparezca
+  let logoUrl = getLogoUrl()
+  try {
+    const res = await fetch('/api/settings')
+    if (res.ok) {
+      const s = await res.json()
+      if (s.logo_url) {
+        saveLogoUrl(s.logo_url)   // actualizar caché local
+        logoUrl = s.logo_url
+      } else {
+        saveLogoUrl(null)
+        logoUrl = null
+      }
+      // Actualizar también la config del restaurante con datos frescos del servidor
+      if (s.restaurant_name) {
+        const updated = {
+          ...config,
+          restaurantName: s.restaurant_name,
+          address: s.address || '',
+          phone: s.phone || '',
+          nit: s.nit || '',
+          footer: s.footer || config.footer,
+        }
+        saveTicketConfig(updated)
+        Object.assign(config, updated)
+      }
+    }
+  } catch (_) {
+    // Si falla la red, usar lo que haya en localStorage
+  }
+
+  const htmlBody = generateInvoiceHTML(order, extras, config, logoUrl)
+  return printHTMLTicket(htmlBody, `Factura #${order.orderNumber}`, paperWidth)
 }
 
 // Verificar si la impresión está habilitada

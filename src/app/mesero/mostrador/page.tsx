@@ -141,11 +141,6 @@ export default function MeseroMostradorPage() {
       return
     }
 
-    if (!shift) {
-      toast.error('No hay turno abierto en caja')
-      return
-    }
-
     setSending(true)
     try {
       const res = await fetch('/api/orders/mostrador', {
@@ -190,24 +185,6 @@ export default function MeseroMostradorPage() {
       </div>
     )
   }
-
-  if (!shift) {
-    return (
-      <div className="max-w-md mx-auto mt-20">
-        <Card>
-          <CardContent className="p-8 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Coffee className="h-8 w-8 text-gray-400" />
-            </div>
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">No hay turno abierto</h2>
-            <p className="text-gray-500 mb-6">El cajero debe abrir turno para poder vender en mostrador</p>
-            <a
-              href="/mesero"
-              className="inline-block px-6 py-3 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition-colors"
-            >
-              Volver al Inicio
-            </a>
-          </CardContent>
         </Card>
       </div>
     )
@@ -230,6 +207,14 @@ export default function MeseroMostradorPage() {
           <RefreshCw className="h-5 w-5" />
         </button>
       </div>
+
+      {/* Aviso sin turno abierto */}
+      {!shift && !shiftLoading && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-3">
+          <Coffee className="h-5 w-5 text-amber-600 shrink-0" />
+          <p className="text-sm text-amber-800">No hay turno abierto en caja. Puedes registrar la venta y el cajero la cobrará cuando abra turno.</p>
+        </div>
+      )}
 
       {/* Última venta */}
       {lastOrder && (

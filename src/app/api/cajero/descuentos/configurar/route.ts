@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     }
 
     // Get user from session
-    const cookieStore = cookies()
+    const cookieStore = await cookies()
     const sessionCookie = cookieStore.get('session')
     let userId = null
     if (sessionCookie?.value) {

@@ -6,8 +6,8 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, Printer, RotateCcw, Percent,
   Receipt, Wallet, Search, Table2, ClipboardList,
-  Users, FolderTree, Package, MapPin, Warehouse, Shield,
-  Settings, History, LogOut, Menu, X, ChevronDown, TrendingUp, Banknote, BarChart3, Utensils, Zap
+  Users, FolderTree, Package, MapPin, Warehouse,
+  Settings, History, LogOut, Menu, X, ChevronDown, TrendingUp, BarChart3
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -45,49 +45,23 @@ const adminSections = [
       { href: '/admin/transacciones', label: 'Transacciones Diarias', icon: Receipt },
       { href: '/admin/reportes', label: 'Reportes', icon: TrendingUp },
       { href: '/admin/precios', label: 'Consulta Precios', icon: Search },
+      { href: '/admin/cierres-caja', label: 'Cierres de Caja', icon: Wallet },
     ]
   },
   {
     title: 'Sistema',
     items: [
-      { href: '/admin/permissions', label: 'Permisos', icon: Shield },
       { href: '/admin/settings', label: 'Configuración', icon: Settings },
       { href: '/admin/audit', label: 'Auditoría', icon: History },
     ]
   },
 ]
 
-// Sección de Caja (colapsable, cerrada por defecto)
-const cajaSections = [
-  {
-    title: 'Cajas',
-    items: [
-      { href: '/admin/caja', label: 'Caja - Restaurante Chino', icon: Utensils },
-      { href: '/admin/caja-comidas-rapidas', label: 'Caja - Comidas Rápidas', icon: Zap },
-    ]
-  },
-  {
-    title: 'Operaciones',
-    items: [
-      { href: '/admin/reimpresiones', label: 'Reimpresiones', icon: Printer },
-      { href: '/admin/devoluciones', label: 'Devoluciones', icon: RotateCcw },
-      { href: '/admin/descuentos', label: 'Descuentos', icon: Percent },
-    ]
-  },
-  {
-    title: 'Historial',
-    items: [
-      { href: '/admin/cierres-caja', label: 'Cierres de Caja', icon: Wallet },
-    ]
-  },
-]
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [expandedSections, setExpandedSections] = useState<string[]>(['Principal', 'Gestión', 'Consultas', 'Sistema'])
-  const [cajaExpanded, setCajaExpanded] = useState(true)
-  const [expandedCajaSections, setExpandedCajaSections] = useState<string[]>(['Cajas', 'Facturación', 'Operaciones', 'Historial'])
   const pathname = usePathname()
   const router = useRouter()
 
@@ -129,14 +103,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const toggleSection = (title: string) => {
     setExpandedSections(prev =>
-      prev.includes(title)
-        ? prev.filter(s => s !== title)
-        : [...prev, title]
-    )
-  }
-
-  const toggleCajaSection = (title: string) => {
-    setExpandedCajaSections(prev =>
       prev.includes(title)
         ? prev.filter(s => s !== title)
         : [...prev, title]
@@ -212,60 +178,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           ))}
 
-          {/* Separador */}
-          <div className="my-4 border-t border-gray-200"></div>
-
-          {/* Sección CAJA (colapsable, cerrada por defecto) */}
-          <div className="mb-2">
-            <button
-              onClick={() => setCajaExpanded(!cajaExpanded)}
-              className="flex items-center justify-between w-full px-3 py-2 text-xs font-bold text-gray-700 uppercase tracking-wider hover:bg-gray-100 rounded-lg"
-            >
-              <div className="flex items-center gap-2">
-                <Banknote className="h-4 w-4" />
-                CAJA
-              </div>
-              <ChevronDown className={`h-4 w-4 transition-transform ${cajaExpanded ? 'rotate-180' : ''}`} />
-            </button>
-
-            {cajaExpanded && (
-              <div className="mt-2 pl-2 border-l-2 border-gray-200 ml-4">
-                {cajaSections.map((section) => (
-                  <div key={section.title} className="mb-2">
-                    <button
-                      onClick={() => toggleCajaSection(section.title)}
-                      className="flex items-center justify-between w-full px-3 py-1.5 text-xs font-bold text-gray-600 uppercase tracking-wider hover:text-gray-900"
-                    >
-                      {section.title}
-                      <ChevronDown className={`h-3 w-3 transition-transform ${expandedCajaSections.includes(section.title) ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {expandedCajaSections.includes(section.title) && (
-                      <div className="mt-1 space-y-1">
-                        {section.items.map((item) => {
-                          const isActive = pathname === item.href || (pathname.startsWith(item.href + '/'))
-                          return (
-                            <Link
-                              key={item.href}
-                              href={item.href}
-                              onClick={() => setSidebarOpen(false)}
-                              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${isActive
-                                ? 'bg-gray-900 text-white'
-                                : 'text-gray-700 hover:bg-gray-100'
-                                }`}
-                            >
-                              <item.icon className="h-4 w-4" />
-                              {item.label}
-                            </Link>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </nav>
 
         {/* User info */}

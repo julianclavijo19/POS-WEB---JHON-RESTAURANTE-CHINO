@@ -63,7 +63,7 @@ function CobrarContent() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'transfer' | 'mixed'>('cash')
   const [tip, setTip] = useState(0)
   const [tipType, setTipType] = useState<'fixed' | 'percent'>('percent')
-  const [tipPercent, setTipPercent] = useState(10)
+  const [tipPercent, setTipPercent] = useState(0)
   const [discount, setDiscount] = useState(0)
   const [discountType, setDiscountType] = useState<'fixed' | 'percent'>('percent')
   const [receivedAmount, setReceivedAmount] = useState(0)
@@ -141,12 +141,9 @@ function CobrarContent() {
 
   const calculateTotal = () => {
     if (!selectedOrder) return 0
-    const subtotal = selectedOrder.subtotal
     const discountAmount = calculateDiscount()
     const tipAmount = calculateTip()
-    const taxable = subtotal - discountAmount
-    const tax = taxable * 0.08
-    return taxable + tax + tipAmount
+    return Math.max(0, selectedOrder.total - discountAmount + tipAmount)
   }
 
   const calculateChange = () => {
@@ -252,7 +249,7 @@ function CobrarContent() {
         notes: item.notes
       })),
       subtotal: selectedOrder.subtotal,
-      tax: (selectedOrder.subtotal - calculateDiscount()) * 0.08,
+      tax: selectedOrder.tax,
       total: calculateTotal(),
       discount: calculateDiscount(),
       tip: calculateTip(),
@@ -273,7 +270,7 @@ function CobrarContent() {
   const resetPaymentState = () => {
     setPaymentMethod('cash')
     setTip(0)
-    setTipPercent(10)
+    setTipPercent(0)
     setDiscount(0)
     setReceivedAmount(0)
     setMixedPayments([])
@@ -495,10 +492,12 @@ function CobrarContent() {
                     <span>-{formatCurrency(calculateDiscount())}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">IVA (8%)</span>
-                  <span>{formatCurrency((selectedOrder.subtotal - calculateDiscount()) * 0.08)}</span>
-                </div>
+                {selectedOrder.tax > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Impuesto</span>
+                    <span>{formatCurrency(selectedOrder.tax)}</span>
+                  </div>
+                )}
                 {calculateTip() > 0 && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Propina</span>

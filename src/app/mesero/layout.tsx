@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   ClipboardList,
@@ -34,6 +34,7 @@ export default function MeseroLayout({ children }: { children: React.ReactNode }
   const [user, setUser] = useState<User | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const pathname = usePathname()
+  const router = useRouter()
 
   useEffect(() => {
     const getCookie = (name: string) => {
@@ -47,6 +48,10 @@ export default function MeseroLayout({ children }: { children: React.ReactNode }
     if (sessionCookie) {
       try {
         const sessionData = JSON.parse(decodeURIComponent(sessionCookie))
+        // Redirigir a su ruta correcta si el rol no es WAITER
+        if (sessionData.role === 'ADMIN') { router.replace('/admin'); return }
+        if (sessionData.role === 'CASHIER') { router.replace('/cajero'); return }
+        if (sessionData.role === 'KITCHEN') { router.replace('/cocina'); return }
         setUser(sessionData)
       } catch (e) {
         console.error('Error parsing session:', e)

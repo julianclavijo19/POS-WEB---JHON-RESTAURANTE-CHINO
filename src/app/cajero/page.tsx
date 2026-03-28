@@ -237,6 +237,18 @@ export default function CajeroPage() {
     return () => clearInterval(interval)
   }, [fetchShift, fetchTables, fetchDiscounts])
 
+  // Sincronizar modal de cobrar cuando areas se actualiza (items agregados por mesera)
+  useEffect(() => {
+    if (!selectedTable) return
+    const updatedTable = areas
+      .flatMap((a: Area) => a.tables)
+      .find((t: Table) => t.id === selectedTable.id)
+    if (updatedTable && updatedTable.current_order) {
+      setSelectedTable(updatedTable)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [areas])
+
   // Open shift
   const handleOpenShift = async () => {
     if (!user) {
@@ -814,7 +826,7 @@ export default function CajeroPage() {
                 return (
                   <div
                     key={table.id}
-                    onClick={() => hasOrder && setSelectedTable(table)}
+                    onClick={() => { if (hasOrder) { setSelectedTable(table); fetchTables(); } }}
                     className={hasOrder ? 'cursor-pointer' : 'cursor-default'}
                   >
                     <Card className={`transition-all ${hasOrder ? 'hover:shadow-md ring-2 ring-gray-900' : 'opacity-50'}`}>
@@ -908,10 +920,12 @@ export default function CajeroPage() {
                   <span className="text-gray-500">Subtotal</span>
                   <span>{formatCurrency(selectedTable.current_order.subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">IVA (8%)</span>
-                  <span>{formatCurrency(selectedTable.current_order.tax)}</span>
-                </div>
+                {selectedTable.current_order.tax > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Impuesto</span>
+                    <span>{formatCurrency(selectedTable.current_order.tax)}</span>
+                  </div>
+                )}
                 {(selectedTable.current_order.discount > 0 || calculateDiscount() > 0) && (
                   <div className="flex justify-between text-sm text-green-600">
                     <span>Descuento</span>

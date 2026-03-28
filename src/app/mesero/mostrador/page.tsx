@@ -185,10 +185,6 @@ export default function MeseroMostradorPage() {
       </div>
     )
   }
-        </Card>
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-6">

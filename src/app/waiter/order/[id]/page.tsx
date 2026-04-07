@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Button, Card, CardContent, Badge, Modal } from '@/components/ui'
 import { formatCurrency, formatTime, getTimeDifference } from '@/lib/utils'
@@ -14,6 +14,7 @@ import {
   Check,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
 
 interface OrderItem {
   id: string
@@ -50,12 +51,6 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchOrder()
-    const interval = setInterval(fetchOrder, 10000)
-    return () => clearInterval(interval)
-  }, [orderId])
-
   const fetchOrder = async () => {
     try {
       const res = await fetch(`/api/orders/${orderId}`)
@@ -68,6 +63,19 @@ export default function OrderDetailPage() {
     }
   }
 
+  const fetchOrderFn = useCallback(async () => {
+    await fetchOrder()
+    return null
+  }, [orderId])
+
+  const { status: rtStatus, refetch } = useRealtimeQuery<null>({
+    channel: `waiter-order-${orderId}`,
+    tables: ['orders', 'order_items'],
+    fetchFn: fetchOrderFn,
+    fallbackInterval: 30000,
+    enabled: !!orderId,
+  })
+
   const handleRequestBill = async () => {
     try {
       await fetch(`/api/orders/${orderId}`, {
@@ -76,7 +84,7 @@ export default function OrderDetailPage() {
         body: JSON.stringify({ status: 'SERVED' }),
       })
       toast.success('Cuenta solicitada')
-      fetchOrder()
+      refetch()
     } catch (error) {
       toast.error('Error al solicitar cuenta')
     }

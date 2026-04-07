@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui'
 import { formatCurrency, formatOrderNumber } from '@/lib/utils'
@@ -11,6 +11,7 @@ import {
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 import { printCorrectionTicket } from '@/lib/printer'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
 
 interface OrderItem {
   id: string
@@ -96,11 +97,21 @@ export default function ComandaDetailPage() {
       router.push('/mesero')
       return
     }
-    fetchOrder()
     fetchProductCatalog()
-    const interval = setInterval(fetchOrder, 10000)
-    return () => clearInterval(interval)
   }, [orderId, router])
+
+  const fetchOrderFn = useCallback(async () => {
+    await fetchOrder()
+    return null
+  }, [orderId])
+
+  const { refetch } = useRealtimeQuery<null>({
+    channel: `mesero-order-${orderId}`,
+    tables: ['orders', 'order_items'],
+    fetchFn: fetchOrderFn,
+    fallbackInterval: 0,
+    enabled: !!orderId && orderId !== 'nueva',
+  })
 
   useEffect(() => {
     if (showAddItem) {

@@ -232,24 +232,27 @@ export async function GET(request: Request) {
         (tablesWithActiveOrders || []).map(o => o.table_id)
       )
       
-      // Sincronizar mesas con estado incorrecto
+// Sincronizar mesas con estado incorrecto (fire-and-forget)
+      const tableSyncUpdates: Array<{ id: string; status: string }> = []
       for (const table of allActiveTables) {
         const hasActiveOrder = occupiedTableIds.has(table.id)
         if (hasActiveOrder) {
           activeTablesCount++
           if (table.status !== 'OCCUPIED') {
-            await supabase
-              .from('tables')
-              .update({ status: 'OCCUPIED', updated_at: new Date().toISOString() })
-              .eq('id', table.id)
+            tableSyncUpdates.push({ id: table.id, status: 'OCCUPIED' })
           }
         } else if (table.status === 'OCCUPIED') {
-          // Mesa marcada como ocupada pero sin órdenes activas -> liberar
-          await supabase
-            .from('tables')
-            .update({ status: 'FREE', updated_at: new Date().toISOString() })
-            .eq('id', table.id)
+          tableSyncUpdates.push({ id: table.id, status: 'FREE' })
         }
+      }
+
+      // Fire-and-forget — don't await, don't block response
+      for (const upd of tableSyncUpdates) {
+        supabase
+          .from('tables')
+          .update({ status: upd.status, updated_at: new Date().toISOString() })
+          .eq('id', upd.id)
+          .then(() => {})
       }
     }
 

@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
 import { formatCurrency, getTimeDifference } from '@/lib/utils'
 import { 
   Users, Clock, Search, RefreshCw, Timer
 } from 'lucide-react'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
+import { ConnectionStatusBadge } from '@/components/ui/ConnectionStatus'
 
 interface Table {
   id: string
@@ -32,30 +34,30 @@ interface Area {
 }
 
 export default function MesasPage() {
-  const [areas, setAreas] = useState<Area[]>([])
-  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'available' | 'occupied'>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const fetchTables = useCallback(async () => {
+  const fetchTablesFn = useCallback(async (): Promise<Area[]> => {
     try {
       const res = await fetch('/api/mesero/mesas')
       if (res.ok) {
-        const data = await res.json()
-        setAreas(data)
+        return await res.json()
       }
+      return []
     } catch (error) {
       console.error('Error:', error)
-    } finally {
-      setLoading(false)
+      return []
     }
   }, [])
 
-  useEffect(() => {
-    fetchTables()
-    const interval = setInterval(fetchTables, 5000)
-    return () => clearInterval(interval)
-  }, [fetchTables])
+  const { data, loading, status, refetch } = useRealtimeQuery<Area[]>({
+    channel: 'admin-tables',
+    tables: ['tables', 'orders', 'order_items'],
+    fetchFn: fetchTablesFn,
+    fallbackInterval: 30000,
+  })
+
+  const areas = data ?? []
 
   const statusConfig: Record<string, { label: string; dotColor: string }> = {
     FREE: { label: 'Disponible', dotColor: 'bg-green-500' },
@@ -111,12 +113,15 @@ export default function MesasPage() {
           <p className="text-gray-500 text-sm mt-1">Vista en tiempo real del estado de las mesas</p>
         </div>
         
-        <button 
-          onClick={fetchTables}
-          className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-        >
-          <RefreshCw className="h-5 w-5 text-gray-600" />
-        </button>
+        <div className="flex items-center gap-2">
+          <ConnectionStatusBadge status={status} onRefresh={refetch} />
+          <button 
+            onClick={() => refetch()}
+            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="h-5 w-5 text-gray-600" />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

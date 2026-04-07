@@ -5,112 +5,110 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    // Obtener áreas con sus mesas
-    const { data: areas, error } = await supabase
-      .from('areas')
-      .select(`
-        id,
-        name,
-        tables (
+    // Fetch areas + tables and active orders in parallel (avoid N+1)
+    const [areasRes, ordersRes] = await Promise.all([
+      supabase
+        .from('areas')
+        .select(`
           id,
           name,
-          capacity,
+          tables (
+            id,
+            name,
+            capacity,
+            status,
+            is_active
+          )
+        `)
+        .eq('is_active', true)
+        .order('name')
+        .order('name', { referencedTable: 'tables' }),
+
+      supabase
+        .from('orders')
+        .select(`
+          id,
+          order_number,
           status,
-          is_active
-        )
-      `)
-      .eq('is_active', true)
-      .order('name')
-      .order('name', { referencedTable: 'tables' })
+          total,
+          created_at,
+          table_id,
+          waiter_id,
+          waiter:users!waiter_id(id, name),
+          items:order_items(id, status)
+        `)
+        .neq('status', 'PAID')
+        .neq('status', 'CANCELLED')
+        .not('table_id', 'is', null)
+        .order('created_at', { ascending: false })
+    ])
 
-    if (error) throw error
+    if (areasRes.error) throw areasRes.error
+    if (ordersRes.error) throw ordersRes.error
 
-    // Para cada mesa, verificar si tiene órdenes activas y sincronizar el estado
-    const areasWithOrders = await Promise.all(
-      (areas || []).map(async (area) => {
-        const tablesWithOrders = await Promise.all(
-          (area.tables || [])
-            .filter((t: any) => t.is_active)
-            .map(async (table: any) => {
-              // Buscar órdenes activas para la mesa (no pagadas ni canceladas)
-              const { data: orders, error: ordersError } = await supabase
-                .from('orders')
-                .select(`
-                  id, 
-                  order_number, 
-                  status, 
-                  total,
-                  created_at,
-                  waiter_id,
-                  waiter:users!waiter_id(id, name),
-                  items:order_items(id, status)
-                `)
-                .eq('table_id', table.id)
-                .neq('status', 'PAID')
-                .neq('status', 'CANCELLED')
-                .order('created_at', { ascending: false })
-                .limit(1)
+    // Build a map: table_id → most recent active order
+    const ordersByTable = new Map<string, any>()
+    for (const order of ordersRes.data || []) {
+      if (order.table_id && !ordersByTable.has(order.table_id)) {
+        ordersByTable.set(order.table_id, order)
+      }
+    }
 
-              if (ordersError) {
-                console.error('Error fetching orders for table:', table.id, ordersError)
-              }
+    // Collect table status corrections (fire-and-forget, no cascade)
+    const tableSyncUpdates: Array<{ id: string; status: string }> = []
 
-              const activeOrder = orders && orders.length > 0 ? orders[0] : null
+    const areasWithOrders = (areasRes.data || []).map((area) => {
+      const tablesWithOrders = (area.tables || [])
+        .filter((t: any) => t.is_active)
+        .map((table: any) => {
+          const activeOrder = ordersByTable.get(table.id) || null
 
-              // Sincronizar el estado de la mesa basado en las órdenes activas
-              let realStatus = table.status
-              if (activeOrder) {
-                // Hay una orden activa: la mesa debe estar OCCUPIED
-                if (table.status !== 'OCCUPIED') {
-                  realStatus = 'OCCUPIED'
-                  await supabase
-                    .from('tables')
-                    .update({ status: 'OCCUPIED', updated_at: new Date().toISOString() })
-                    .eq('id', table.id)
-                }
-              } else {
-                // No hay órdenes activas: si estaba OCCUPIED, debe ser FREE
-                if (table.status === 'OCCUPIED') {
-                  realStatus = 'FREE'
-                  await supabase
-                    .from('tables')
-                    .update({ status: 'FREE', updated_at: new Date().toISOString() })
-                    .eq('id', table.id)
-                }
-              }
+          let realStatus = table.status
+          if (activeOrder && table.status !== 'OCCUPIED') {
+            realStatus = 'OCCUPIED'
+            tableSyncUpdates.push({ id: table.id, status: 'OCCUPIED' })
+          } else if (!activeOrder && table.status === 'OCCUPIED') {
+            realStatus = 'FREE'
+            tableSyncUpdates.push({ id: table.id, status: 'FREE' })
+          }
 
-              if (activeOrder) {
-                const itemsCount = activeOrder.items?.length || 0
-                const readyItems = activeOrder.items?.filter((i: any) => i.status === 'READY' || i.status === 'ready').length || 0
-                
-                return { 
-                  ...table,
-                  status: realStatus,
-                  current_order: {
-                    ...activeOrder,
-                    items_count: itemsCount,
-                    ready_items: readyItems,
-                  },
-                  waiter: activeOrder.waiter
-                }
-              }
-              
-              return { ...table, status: realStatus, current_order: null, waiter: null }
-            })
-        )
+          if (activeOrder) {
+            const itemsCount = activeOrder.items?.length || 0
+            const readyItems = activeOrder.items?.filter((i: any) => i.status === 'READY' || i.status === 'ready').length || 0
+            return {
+              ...table,
+              status: realStatus,
+              current_order: {
+                ...activeOrder,
+                items_count: itemsCount,
+                ready_items: readyItems,
+              },
+              waiter: activeOrder.waiter
+            }
+          }
 
-        return { 
-          ...area, 
-          tables: tablesWithOrders.sort((a: any, b: any) => {
-            // Sort by name (numeric-aware)
-            const aNum = parseInt(a.name.replace(/\D/g, '')) || 0
-            const bNum = parseInt(b.name.replace(/\D/g, '')) || 0
-            if (aNum !== bNum) return aNum - bNum
-            return a.name.localeCompare(b.name)
-          })
-        }
-      })
-    )
+          return { ...table, status: realStatus, current_order: null, waiter: null }
+        })
+        .sort((a: any, b: any) => {
+          const aNum = parseInt(a.name.replace(/\D/g, '')) || 0
+          const bNum = parseInt(b.name.replace(/\D/g, '')) || 0
+          if (aNum !== bNum) return aNum - bNum
+          return a.name.localeCompare(b.name)
+        })
+
+      return { ...area, tables: tablesWithOrders }
+    })
+
+    // Fire-and-forget sync — don't await, don't block response, don't cascade
+    if (tableSyncUpdates.length > 0) {
+      for (const upd of tableSyncUpdates) {
+        supabase
+          .from('tables')
+          .update({ status: upd.status, updated_at: new Date().toISOString() })
+          .eq('id', upd.id)
+          .then(() => {})
+      }
+    }
 
     return NextResponse.json(areasWithOrders)
   } catch (error) {

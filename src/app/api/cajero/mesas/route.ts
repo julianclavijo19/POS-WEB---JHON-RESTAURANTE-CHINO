@@ -66,31 +66,25 @@ export async function GET() {
     })
 
     // Construir respuesta con áreas y mesas, incluyendo órdenes activas
-    // También sincronizar estado de mesas
-    const areasWithOrders = await Promise.all((areas || []).map(async (area) => ({
+    // Nota: NO hacer UPDATE de tables aquí — genera eventos realtime en cascada
+    const tableSyncUpdates: Array<{ id: string; status: string }> = []
+
+    const areasWithOrders = (areas || []).map((area) => ({
       ...area,
-      tables: await Promise.all((area.tables || [])
+      tables: (area.tables || [])
         .filter((t: any) => t.is_active)
-        .map(async (table: any) => {
+        .map((table: any) => {
           const order = ordersByTable.get(table.id)
           
           // Determinar el estado real basado en si hay órdenes activas
           let effectiveStatus = table.status
           
           if (order && table.status !== 'OCCUPIED') {
-            // Hay una orden activa pero la mesa no está marcada como ocupada
             effectiveStatus = 'OCCUPIED'
-            await supabase
-              .from('tables')
-              .update({ status: 'OCCUPIED', updated_at: new Date().toISOString() })
-              .eq('id', table.id)
+            tableSyncUpdates.push({ id: table.id, status: 'OCCUPIED' })
           } else if (!order && table.status === 'OCCUPIED') {
-            // No hay orden activa pero la mesa está marcada como ocupada -> liberarla
             effectiveStatus = 'FREE'
-            await supabase
-              .from('tables')
-              .update({ status: 'FREE', updated_at: new Date().toISOString() })
-              .eq('id', table.id)
+            tableSyncUpdates.push({ id: table.id, status: 'FREE' })
           }
           
           return {
@@ -110,8 +104,20 @@ export async function GET() {
             } : null,
             waiter: order?.waiter || null
           }
-        }))
-    })))
+        })
+    }))
+
+    // Sync table statuses in background (fire-and-forget, no await)
+    // This won't block the response and won't cascade realtime events before client gets data
+    if (tableSyncUpdates.length > 0) {
+      for (const upd of tableSyncUpdates) {
+        supabase
+          .from('tables')
+          .update({ status: upd.status, updated_at: new Date().toISOString() })
+          .eq('id', upd.id)
+          .then(() => {})
+      }
+    }
 
     // Calcular estadísticas - separar órdenes de mesa y para llevar
     const allTables = areasWithOrders.flatMap(a => a.tables)

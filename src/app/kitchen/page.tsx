@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { Card, CardContent, Badge, Button } from '@/components/ui'
 import { formatTime, getTimeDifference, cn } from '@/lib/utils'
 import { Check, Clock, RefreshCw, ChefHat, Bell } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
+import { ConnectionStatusBadge } from '@/components/ui/ConnectionStatus'
 
 interface OrderItem {
   id: string
@@ -29,26 +31,25 @@ interface Order {
 }
 
 export default function KitchenPage() {
-  const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const fetchOrders = useCallback(async () => {
+  const fetchOrdersFn = useCallback(async (): Promise<Order[]> => {
     try {
       const res = await fetch('/api/kitchen')
       const data = await res.json()
-      setOrders(data)
+      return data
     } catch (error) {
       console.error('Error fetching orders:', error)
-    } finally {
-      setLoading(false)
+      return []
     }
   }, [])
 
-  useEffect(() => {
-    fetchOrders()
-    const interval = setInterval(fetchOrders, 5000) // Actualizar cada 5 segundos
-    return () => clearInterval(interval)
-  }, [fetchOrders])
+  const { data, loading, status, refetch } = useRealtimeQuery<Order[]>({
+    channel: 'kitchen-alt',
+    tables: ['orders', 'order_items'],
+    fetchFn: fetchOrdersFn,
+    fallbackInterval: 0,
+  })
+
+  const orders = data ?? []
 
   const handleMarkItemReady = async (orderId: string, itemId: string) => {
     try {
@@ -58,7 +59,7 @@ export default function KitchenPage() {
         body: JSON.stringify({ status: 'READY' }),
       })
       toast.success('Item marcado como listo')
-      fetchOrders()
+      refetch()
     } catch (error) {
       toast.error('Error al actualizar')
     }
@@ -80,7 +81,7 @@ export default function KitchenPage() {
         }
       }
       toast.success('¡Orden lista para servir!')
-      fetchOrders()
+      refetch()
     } catch (error) {
       toast.error('Error al actualizar')
     }
@@ -115,10 +116,13 @@ export default function KitchenPage() {
             <p className="text-gray-400">{orders.length} órdenes activas</p>
           </div>
         </div>
-        <Button variant="ghost" onClick={fetchOrders} className="text-white">
-          <RefreshCw className="h-5 w-5 mr-2" />
-          Actualizar
-        </Button>
+        <div className="flex items-center gap-3">
+          <ConnectionStatusBadge status={status} onRefresh={refetch} />
+          <Button variant="ghost" onClick={() => refetch()} className="text-white">
+            <RefreshCw className="h-5 w-5 mr-2" />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {/* Grid de órdenes */}

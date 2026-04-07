@@ -8,6 +8,7 @@ import {
   TrendingUp, Wallet, CheckCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
 
 interface User {
   id: string
@@ -76,11 +77,12 @@ export default function ComidasRapidasPage() {
     }
   }, [])
 
-  useEffect(() => {
-    fetchShift()
-    const interval = setInterval(fetchShift, 30000)
-    return () => clearInterval(interval)
-  }, [fetchShift])
+  useRealtimeQuery<null>({
+    channel: 'cajero-fastfood',
+    tables: ['cash_registers'],
+    fetchFn: async () => { await fetchShift(); return null },
+    fallbackInterval: 120000,
+  })
 
   // Open shift
   const handleOpenShift = async () => {

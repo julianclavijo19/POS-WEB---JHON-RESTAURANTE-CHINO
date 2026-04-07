@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { Button, Card, CardContent, Badge, Modal, Input } from '@/components/ui'
 import { formatCurrency, formatTime } from '@/lib/utils'
@@ -15,6 +15,8 @@ import {
   DollarSign,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
+import { ConnectionStatusBadge } from '@/components/ui/ConnectionStatus'
 
 interface Order {
   id: string
@@ -61,13 +63,6 @@ export default function POSPage() {
   const [discountAmount, setDiscountAmount] = useState('')
   const [discountType, setDiscountType] = useState<'fixed' | 'percentage'>('fixed')
 
-  useEffect(() => {
-    fetchCashRegister()
-    fetchOrders()
-    const interval = setInterval(fetchOrders, 10000) // Actualizar cada 10 segundos
-    return () => clearInterval(interval)
-  }, [])
-
   const fetchCashRegister = async () => {
     try {
       const res = await fetch('/api/cash-register')
@@ -92,6 +87,22 @@ export default function POSPage() {
       setLoading(false)
     }
   }
+
+  const fetchAllFn = useCallback(async () => {
+    await fetchOrders()
+    return null
+  }, [])
+
+  const { status: rtStatus, refetch } = useRealtimeQuery<null>({
+    channel: 'pos-orders',
+    tables: ['orders', 'order_items', 'payments'],
+    fetchFn: fetchAllFn,
+    fallbackInterval: 30000,
+  })
+
+  useEffect(() => {
+    fetchCashRegister()
+  }, [])
 
   const handleOpenRegister = async () => {
     try {

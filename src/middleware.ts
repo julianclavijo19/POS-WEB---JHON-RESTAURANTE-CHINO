@@ -4,7 +4,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // Rutas públicas
-  const publicRoutes = ['/login', '/api/auth', '/api/']
+  const publicRoutes = ['/login', '/api/auth', '/api/', '/test-realtime']
 
   // Si está en una ruta pública o API, permitir acceso
   if (publicRoutes.some((route) => pathname.startsWith(route))) {

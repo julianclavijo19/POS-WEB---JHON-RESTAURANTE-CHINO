@@ -1,9 +1,12 @@
 /**
- * Script de caja monedera - Solución definitiva para producción
+ * Script de caja monedera - Realtime + Fallback
  * ============================================================
- * Supabase ◄── polling ──► Este script ──COM Serial──► Impresora ──RJ11──► Caja monedera
+ * Supabase Realtime ◄── INSERT print_queue ──► Este script ──COM Serial──► Impresora ──RJ11──► Caja monedera
+ * Fallback: polling cada 10s si WS cae
  *
  * Características:
+ *  - Suscripción Realtime a INSERT en print_queue (type=cash_drawer) ~1s latencia
+ *  - Fallback polling 10s si WebSocket se desconecta
  *  - Puerto serial PERSISTENTE (se abre una vez, se mantiene abierto, auto-reconección)
  *  - Mutex: nunca envía 2 comandos en paralelo
  *  - Deduplicación: ignora solicitudes duplicadas dentro de ventana configurable
@@ -28,7 +31,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABAS
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const COM_PORT = process.env.CASH_DRAWER_COM_PORT || '';
 const PRINTER_NAME = process.env.CASH_DRAWER_PRINTER_NAME || process.env.PRINTER_NAME || '';
-const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '2000', 10);
+const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '10000', 10); // 10s fallback (antes 2s)
 const MAX_RETRIES = parseInt(process.env.CASH_DRAWER_MAX_RETRIES || '5', 10);
 const RETRY_DELAY_MS = parseInt(process.env.CASH_DRAWER_RETRY_DELAY_MS || '1500', 10);
 const DEDUP_WINDOW_MS = parseInt(process.env.CASH_DRAWER_DEDUP_MS || '3000', 10);
@@ -36,6 +39,7 @@ const HEALTH_LOG_INTERVAL_MS = 5 * 60 * 1000; // cada 5 minutos
 const RECONNECT_DELAY_MS = 3000;
 const BAUD_RATE = parseInt(process.env.CASH_DRAWER_BAUD_RATE || '9600', 10);
 const SCRIPT_DIR = __dirname;
+const HEARTBEAT_INTERVAL_MS = 30000; // verificar canal cada 30s
 
 // ESC/POS comandos para abrir cajón
 const ESC_POS_PIN0 = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]);
@@ -68,7 +72,9 @@ if (!COM_PORT && !PRINTER_NAME) {
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  realtime: { params: { eventsPerSecond: 10 } }
+});
 
 // ─── Puerto Serial Persistente ───────────────────────────────────
 let serialPort = null;
@@ -329,10 +335,13 @@ async function claimPendingJobs() {
   return ids;
 }
 
-// ─── Polling principal ────────────────────────────────────────────
+// ─── Polling principal (fallback) ─────────────────────────────────
 let isPolling = false;
 let jobsProcessed = 0;
 let lastPollError = null;
+let connectionMode = 'offline'; // 'realtime' | 'polling' | 'offline'
+let realtimeChannel = null;
+let fallbackTimer = null;
 
 async function pollOnce() {
   if (isPolling) return;
@@ -354,7 +363,6 @@ async function pollOnce() {
 
     lastPollError = null;
   } catch (err) {
-    // Solo loguear si es un error nuevo (evitar spam)
     if (lastPollError !== err.message) {
       logError('Error en polling', err);
       lastPollError = err.message;
@@ -364,17 +372,122 @@ async function pollOnce() {
   }
 }
 
+/**
+ * Maneja un evento Realtime INSERT para cash_drawer
+ */
+async function handleRealtimeInsert(record) {
+  if (record.printed_at) return; // ya procesado
+  if (record.type !== 'cash_drawer') return; // filtro de seguridad
+
+  log(`[REALTIME] Nuevo job cash_drawer detectado: ${record.id}`);
+
+  // Claim-first: marcar como procesado inmediatamente
+  const { error } = await supabase
+    .from('print_queue')
+    .update({ printed_at: new Date().toISOString() })
+    .eq('id', record.id)
+    .is('printed_at', null); // solo si nadie lo reclamó antes
+
+  if (error) {
+    logError('Error reclamando job via Realtime', error);
+    return;
+  }
+
+  const ok = await openDrawer();
+  if (ok) {
+    jobsProcessed++;
+    log(`✓ [REALTIME] Cajón abierto (job ${record.id}, total sesión: ${jobsProcessed})`);
+  } else {
+    logError(`✗ [REALTIME] No se pudo abrir el cajón para job ${record.id}`);
+  }
+}
+
+function startFallbackPolling() {
+  stopFallbackPolling();
+  connectionMode = 'polling';
+  log(`[FALLBACK] Polling activado (intervalo: ${POLL_INTERVAL_MS}ms)`);
+  fallbackTimer = setInterval(pollOnce, POLL_INTERVAL_MS);
+  pollOnce(); // ejecutar inmediatamente
+}
+
+function stopFallbackPolling() {
+  if (fallbackTimer) {
+    clearInterval(fallbackTimer);
+    fallbackTimer = null;
+  }
+}
+
+function startRealtimeSubscription() {
+  try {
+    realtimeChannel = supabase
+      .channel('cash-drawer-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'print_queue',
+          filter: 'type=eq.cash_drawer'
+        },
+        (payload) => handleRealtimeInsert(payload.new)
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          connectionMode = 'realtime';
+          stopFallbackPolling();
+          log('✓ [REALTIME] Suscripción activa — print_queue INSERT (cash_drawer)');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          logError(`[REALTIME] Error de canal: ${status}`);
+          if (connectionMode !== 'polling') {
+            startFallbackPolling();
+          }
+        } else if (status === 'CLOSED') {
+          log('[REALTIME] Canal cerrado');
+          if (connectionMode !== 'polling') {
+            startFallbackPolling();
+          }
+        }
+      });
+
+    // Heartbeat: verificar periódicamente que Realtime sigue activo
+    setInterval(() => {
+      if (realtimeChannel) {
+        const state = realtimeChannel.state;
+        if (state !== 'joined') {
+          log(`[HEARTBEAT] Canal en estado: ${state}`);
+          if (connectionMode !== 'polling') {
+            startFallbackPolling();
+          }
+        } else if (connectionMode !== 'realtime') {
+          connectionMode = 'realtime';
+          stopFallbackPolling();
+          log('✓ [HEARTBEAT] Realtime reconectado — fallback desactivado');
+        }
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+
+  } catch (err) {
+    logError('[REALTIME] No se pudo suscribir, usando polling como fallback', err);
+    startFallbackPolling();
+  }
+}
+
 // ─── Health check periódico ───────────────────────────────────────
 function healthLog() {
   const portStatus = COM_PORT
     ? (portReady ? `COM ${COM_PORT} ✓` : `COM ${COM_PORT} ✗ (reconectando)`)
     : `Spooler: ${PRINTER_NAME}`;
-  log(`[HEALTH] Activo | ${portStatus} | Jobs procesados: ${jobsProcessed} | Polling: ${POLL_INTERVAL_MS}ms`);
+  const mode = connectionMode === 'realtime' ? 'Realtime ✓' : connectionMode === 'polling' ? `Polling ${POLL_INTERVAL_MS}ms` : 'Offline ✗';
+  log(`[HEALTH] Activo | ${portStatus} | ${mode} | Jobs procesados: ${jobsProcessed}`);
 }
 
 // ─── Cierre graceful ──────────────────────────────────────────────
 function gracefulShutdown(signal) {
   log(`Recibida señal ${signal}, cerrando...`);
+  stopFallbackPolling();
+  if (realtimeChannel) {
+    try { supabase.removeChannel(realtimeChannel); } catch (_) {}
+  }
   if (serialPort && portReady) {
     try { serialPort.close(); } catch (_) {}
   }
@@ -388,9 +501,10 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 async function run() {
   const via = COM_PORT ? `COM: ${COM_PORT} (serial persistente)` : `Impresora: ${PRINTER_NAME} (spooler)`;
   log('═══════════════════════════════════════════════════════════');
-  log('   SCRIPT CAJA MONEDERA - INICIADO');
+  log('   SCRIPT CAJA MONEDERA - INICIADO (Realtime + Fallback)');
   log(`   Método: ${via}`);
-  log(`   Polling: cada ${POLL_INTERVAL_MS}ms`);
+  log(`   Realtime: Supabase Postgres Changes (INSERT cash_drawer)`);
+  log(`   Fallback polling: cada ${POLL_INTERVAL_MS}ms`);
   log(`   Reintentos: ${MAX_RETRIES} (delay: ${RETRY_DELAY_MS}ms)`);
   log(`   Dedup: ${DEDUP_WINDOW_MS}ms`);
   log(`   Supabase: ${SUPABASE_URL ? '✓ configurado' : '✗ falta'}`);
@@ -412,9 +526,11 @@ async function run() {
   // Health check periódico
   setInterval(healthLog, HEALTH_LOG_INTERVAL_MS);
 
-  // Polling
-  setInterval(pollOnce, POLL_INTERVAL_MS);
-  await pollOnce(); // primera ejecución inmediata
+  // Procesar jobs pendientes (puede haber jobs de antes del arranque)
+  await pollOnce();
+
+  // Iniciar suscripción Realtime (con fallback automático a polling)
+  startRealtimeSubscription();
 }
 
 run().catch((err) => {

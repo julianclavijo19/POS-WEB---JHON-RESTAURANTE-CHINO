@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui'
 import { formatCurrency, getTimeDifference } from '@/lib/utils'
@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { printInvoice, type OrderData } from '@/lib/printer'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
+import { ConnectionStatusBadge } from '@/components/ui/ConnectionStatus'
 
 // Interfaces
 interface OrderItem {
@@ -228,14 +230,21 @@ export default function CajeroPage() {
 
   useEffect(() => {
     fetchShift()
-    fetchTables()
     fetchDiscounts()
-    const interval = setInterval(() => {
-      fetchTables()
-      fetchShift()
-    }, 10000)
-    return () => clearInterval(interval)
-  }, [fetchShift, fetchTables, fetchDiscounts])
+  }, [fetchShift, fetchDiscounts])
+
+  // Realtime: tables, orders, cash_registers, payments
+  const fetchAllFn = useCallback(async () => {
+    await Promise.all([fetchTables(), fetchShift()])
+    return null
+  }, [fetchTables, fetchShift])
+
+  const { status: rtStatus, refetch } = useRealtimeQuery<null>({
+    channel: 'cashier-main',
+    tables: ['tables', 'orders', 'order_items', 'cash_registers', 'payments'],
+    fetchFn: fetchAllFn,
+    fallbackInterval: 0,
+  })
 
   // Sincronizar modal de cobrar cuando areas se actualiza (items agregados por mesera)
   useEffect(() => {
@@ -584,12 +593,13 @@ export default function CajeroPage() {
         
         <div className="flex gap-2">
           <button 
-            onClick={() => { fetchTables(); fetchShift(); }}
+            onClick={() => refetch()}
             className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
             title="Actualizar"
           >
             <RefreshCw className="h-5 w-5 text-gray-600" />
           </button>
+          <ConnectionStatusBadge status={rtStatus} onRefresh={refetch} />
           <button
             onClick={() => setShowCloseShift(true)}
             className="px-4 py-2 bg-red-50 text-red-600 rounded-lg font-medium flex items-center gap-2 hover:bg-red-100 transition-colors"

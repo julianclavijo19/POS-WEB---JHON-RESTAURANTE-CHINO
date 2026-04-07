@@ -8,6 +8,8 @@ import {
   Users, Clock, Plus, Search, RefreshCw, Timer, ArrowLeft, AlertTriangle
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
+import { ConnectionStatusBadge } from '@/components/ui/ConnectionStatus'
 
 interface Table {
   id: string
@@ -40,8 +42,6 @@ interface Shift {
 }
 
 export default function CajeroTomarPedidoPage() {
-  const [areas, setAreas] = useState<Area[]>([])
-  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'available'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [shift, setShift] = useState<Shift | null>(null)
@@ -63,26 +63,31 @@ export default function CajeroTomarPedidoPage() {
     }
   }, [])
 
-  const fetchTables = useCallback(async () => {
+  const fetchTablesFn = useCallback(async (): Promise<Area[]> => {
     try {
       const res = await fetch('/api/mesero/mesas')
       if (res.ok) {
-        const data = await res.json()
-        setAreas(data)
+        return await res.json()
       }
+      return []
     } catch (error) {
       console.error('Error:', error)
-    } finally {
-      setLoading(false)
+      return []
     }
   }, [])
 
+  const { data, loading, status, refetch } = useRealtimeQuery<Area[]>({
+    channel: 'cashier-tables',
+    tables: ['tables', 'areas', 'orders'],
+    fetchFn: fetchTablesFn,
+    fallbackInterval: 30000,
+  })
+
+  const areas = data ?? []
+
   useEffect(() => {
     fetchShift()
-    fetchTables()
-    const interval = setInterval(fetchTables, 5000)
-    return () => clearInterval(interval)
-  }, [fetchShift, fetchTables])
+  }, [fetchShift])
 
   const statusConfig: Record<string, { label: string; dotColor: string }> = {
     FREE: { label: 'Disponible', dotColor: 'bg-green-500' },
@@ -179,12 +184,15 @@ export default function CajeroTomarPedidoPage() {
           </div>
         </div>
         
-        <button 
-          onClick={fetchTables}
-          className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-        >
-          <RefreshCw className="h-5 w-5 text-gray-600" />
-        </button>
+        <div className="flex items-center gap-2">
+          <ConnectionStatusBadge status={status} onRefresh={refetch} />
+          <button 
+            onClick={() => refetch()}
+            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="h-5 w-5 text-gray-600" />
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

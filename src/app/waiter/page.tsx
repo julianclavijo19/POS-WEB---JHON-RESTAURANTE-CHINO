@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, Badge } from '@/components/ui'
 import { cn, formatCurrency } from '@/lib/utils'
 import { Users, Clock, UtensilsCrossed } from 'lucide-react'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
 
 interface Area {
   id: string
@@ -27,12 +28,6 @@ export default function WaiterTablesPage() {
   const [selectedArea, setSelectedArea] = useState<string>('all')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    fetchTables()
-    const interval = setInterval(fetchTables, 15000) // Actualizar cada 15s
-    return () => clearInterval(interval)
-  }, [])
-
   const fetchTables = async () => {
     try {
       const res = await fetch('/api/areas')
@@ -44,6 +39,18 @@ export default function WaiterTablesPage() {
       setLoading(false)
     }
   }
+
+  const fetchTablesFn = useCallback(async () => {
+    await fetchTables()
+    return null
+  }, [])
+
+  useRealtimeQuery<null>({
+    channel: 'waiter-tables',
+    tables: ['tables', 'orders'],
+    fetchFn: fetchTablesFn,
+    fallbackInterval: 60000,
+  })
 
   const handleTableClick = (table: Table) => {
     if (table.status === 'MAINTENANCE') return

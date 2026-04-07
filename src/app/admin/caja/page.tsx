@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui'
 import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { DollarSign, ShoppingCart, CreditCard, TrendingUp, Calendar, BarChart3, Download, RefreshCw, Utensils } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
 
 interface CajeroStats {
   ventasHoy: number
@@ -37,12 +38,6 @@ export default function AdminCajaPage() {
   const [filtroMetodo, setFiltroMetodo] = useState<string>('TODO')
   const [exportando, setExportando] = useState(false)
 
-  useEffect(() => {
-    fetchStats()
-    const interval = setInterval(fetchStats, 20000)
-    return () => clearInterval(interval)
-  }, [])
-
   const fetchStats = async () => {
     try {
       const res = await fetch('/api/cajero/stats')
@@ -61,6 +56,18 @@ export default function AdminCajaPage() {
       setLoading(false)
     }
   }
+
+  const fetchStatsFn = useCallback(async () => {
+    await fetchStats()
+    return null
+  }, [])
+
+  useRealtimeQuery<null>({
+    channel: 'admin-caja',
+    tables: ['payments', 'cash_registers'],
+    fetchFn: fetchStatsFn,
+    fallbackInterval: 60000,
+  })
 
   const handleExport = async () => {
     setExportando(true)

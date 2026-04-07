@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { 
   Clock, User, MapPin, ChefHat, Check, Play, RefreshCw, AlertCircle
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
+import { ConnectionStatusBadge } from '@/components/ui/ConnectionStatus'
 
 interface OrderItem {
   id: string
@@ -28,17 +30,14 @@ interface Order {
 }
 
 export default function CocinaPage() {
-  const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'preparing'>('all')
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrdersFn = useCallback(async (): Promise<Order[]> => {
     try {
       const res = await fetch('/api/cocina/pedidos')
       if (res.ok) {
         const data = await res.json()
-        // Transformar datos
-        const transformed: Order[] = data.map((order: any) => ({
+        return data.map((order: any) => ({
           id: order.id,
           orderNumber: order.order_number,
           status: order.status,
@@ -54,20 +53,22 @@ export default function CocinaPage() {
             product: item.product
           }))
         }))
-        setOrders(transformed)
       }
+      return []
     } catch (error) {
       console.error('Error:', error)
-    } finally {
-      setLoading(false)
+      return []
     }
   }, [])
 
-  useEffect(() => {
-    fetchOrders()
-    const interval = setInterval(fetchOrders, 5000)
-    return () => clearInterval(interval)
-  }, [fetchOrders])
+  const { data, loading, status, refetch } = useRealtimeQuery<Order[]>({
+    channel: 'kitchen-orders',
+    tables: ['orders', 'order_items'],
+    fetchFn: fetchOrdersFn,
+    fallbackInterval: 0,
+  })
+
+  const orders = data ?? []
 
   const getElapsedTime = (createdAt: string) => {
     const elapsed = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000)
@@ -83,7 +84,7 @@ export default function CocinaPage() {
       })
       if (res.ok) {
         toast.success('Preparando...')
-        fetchOrders()
+        refetch()
       }
     } catch (error) {
       toast.error('Error al actualizar')
@@ -99,7 +100,7 @@ export default function CocinaPage() {
       })
       if (res.ok) {
         toast.success('¡Listo!')
-        fetchOrders()
+        refetch()
       }
     } catch (error) {
       toast.error('Error al actualizar')
@@ -115,7 +116,7 @@ export default function CocinaPage() {
       })
       if (res.ok) {
         toast.success('Pedido listo para servir')
-        fetchOrders()
+        refetch()
       }
     } catch (error) {
       toast.error('Error al actualizar')
@@ -157,13 +158,16 @@ export default function CocinaPage() {
             {pendingCount} nuevos • {preparingCount} en preparación • {totalItems} items total
           </p>
         </div>
-        <button 
-          onClick={fetchOrders}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <ConnectionStatusBadge status={status} onRefresh={refetch} />
+          <button 
+            onClick={() => refetch()}
+            className="flex items-center justify-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}

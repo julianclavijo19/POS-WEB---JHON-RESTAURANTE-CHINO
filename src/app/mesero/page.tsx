@@ -7,6 +7,8 @@ import { formatCurrency, formatOrderNumber, getTimeDifference } from '@/lib/util
 import {
   Users, Clock, Plus, Search, Bell, RefreshCw, Timer, Wallet
 } from 'lucide-react'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
+import { ConnectionStatusBadge } from '@/components/ui/ConnectionStatus'
 
 interface Table {
   id: string
@@ -117,23 +119,22 @@ export default function MeseroPage() {
     }
   }, [userId])
 
-  useEffect(() => {
-    fetchTables()
-    checkShiftStatus()
-    const interval = setInterval(() => {
-      fetchTables()
-      checkShiftStatus()
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [fetchTables, checkShiftStatus])
+  // Combined fetch for Realtime hook
+  const fetchAllFn = useCallback(async () => {
+    await Promise.all([
+      fetchTables(),
+      checkShiftStatus(),
+      userId ? fetchNotifications() : Promise.resolve(),
+    ])
+    return null
+  }, [fetchTables, checkShiftStatus, fetchNotifications, userId])
 
-  useEffect(() => {
-    if (userId) {
-      fetchNotifications()
-      const interval = setInterval(fetchNotifications, 10000)
-      return () => clearInterval(interval)
-    }
-  }, [userId, fetchNotifications])
+  const { status: rtStatus, refetch } = useRealtimeQuery<null>({
+    channel: 'waiter-main',
+    tables: ['tables', 'orders', 'order_items'],
+    fetchFn: fetchAllFn,
+    fallbackInterval: 0,
+  })
 
   const statusConfig: Record<string, { label: string; dotColor: string }> = {
     FREE: { label: 'Disponible', dotColor: 'bg-green-500' },
@@ -295,12 +296,15 @@ export default function MeseroPage() {
             )}
           </div>
 
-          <button
-            onClick={fetchTables}
-            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            <RefreshCw className="h-5 w-5 text-gray-600" />
-          </button>
+          <div className="flex items-center gap-2">
+            <ConnectionStatusBadge status={rtStatus} onRefresh={refetch} />
+            <button
+              onClick={() => refetch()}
+              className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              <RefreshCw className="h-5 w-5 text-gray-600" />
+            </button>
+          </div>
         </div>
       </div>
 

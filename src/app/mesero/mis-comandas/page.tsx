@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, Button } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils'
 import { 
   Clock, CheckCircle, Eye, DollarSign, ArrowRight, Coins
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
 
 interface OrderItem {
   id: string
@@ -34,20 +35,12 @@ export default function MisComandasPage() {
   const [loading, setLoading] = useState(true)
   const [totalTips, setTotalTips] = useState(0)
 
-  useEffect(() => {
-    fetchOrders()
-    const interval = setInterval(fetchOrders, 30000)
-    return () => clearInterval(interval)
-  }, [])
-
   const fetchOrders = async () => {
     try {
-      // Obtener todas las comandas del mesero del día
       const res = await fetch('/api/orders?myOrders=true&period=today')
       if (res.ok) {
         const data = await res.json()
         setOrders(data)
-        // Calcular total de propinas
         const tips = data.reduce((sum: number, order: Order) => sum + (order.tip || 0), 0)
         setTotalTips(tips)
       }
@@ -57,6 +50,18 @@ export default function MisComandasPage() {
       setLoading(false)
     }
   }
+
+  const fetchOrdersFn = useCallback(async () => {
+    await fetchOrders()
+    return null
+  }, [])
+
+  useRealtimeQuery<null>({
+    channel: 'mesero-mis-comandas',
+    tables: ['orders', 'order_items'],
+    fetchFn: fetchOrdersFn,
+    fallbackInterval: 60000,
+  })
 
   const getStatusLabel = (status: string) => {
     const map: Record<string, string> = {

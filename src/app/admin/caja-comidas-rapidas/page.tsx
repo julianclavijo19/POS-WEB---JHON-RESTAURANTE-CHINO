@@ -6,6 +6,8 @@ import {
   DollarSign, TrendingUp, Calendar, RefreshCw, 
   Clock, Wallet, CheckCircle, AlertCircle
 } from 'lucide-react'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
+import { ConnectionStatusBadge } from '@/components/ui/ConnectionStatus'
 
 interface Shift {
   id: string
@@ -68,11 +70,12 @@ export default function AdminComidasRapidasPage() {
     }
   }, [period])
 
-  useEffect(() => {
-    fetchData()
-    const interval = setInterval(fetchData, 30000)
-    return () => clearInterval(interval)
-  }, [fetchData])
+  const { status: rtStatus, refetch } = useRealtimeQuery<null>({
+    channel: 'admin-fastfood-caja',
+    tables: ['cash_registers'],
+    fetchFn: async () => { await fetchData(); return null },
+    fallbackInterval: 120000,
+  })
 
   const totalSales = historicalShifts.reduce((sum, s) => sum + Number(s.total_sales || 0), 0)
   const avgSales = historicalShifts.length > 0 ? totalSales / historicalShifts.length : 0
@@ -94,11 +97,14 @@ export default function AdminComidasRapidasPage() {
           <h1 className="text-2xl font-semibold text-gray-900">Caja — Comidas Rápidas</h1>
           <p className="text-sm text-gray-500 mt-1">Monitoreo y estadísticas del punto de venta</p>
         </div>
-        <button onClick={fetchData}
-          className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors self-start"
-          title="Actualizar">
-          <RefreshCw className="h-4 w-4 text-gray-600" />
-        </button>
+        <div className="flex items-center gap-2 self-start">
+          <ConnectionStatusBadge status={rtStatus} onRefresh={refetch} />
+          <button onClick={() => refetch()}
+            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+            title="Actualizar">
+            <RefreshCw className="h-4 w-4 text-gray-600" />
+          </button>
+        </div>
       </div>
 
       {/* Current shift status */}

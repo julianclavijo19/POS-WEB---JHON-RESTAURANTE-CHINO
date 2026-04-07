@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
 import { formatCurrency, getColombiaDateString } from '@/lib/utils'
 import { 
   Search, Calendar, RefreshCw, ClipboardList, 
   Clock, User, MapPin, Eye, ChefHat, CheckCircle2
 } from 'lucide-react'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
+import { ConnectionStatusBadge } from '@/components/ui/ConnectionStatus'
 
 interface OrderItem {
   id: string
@@ -28,33 +30,32 @@ interface Order {
 }
 
 export default function PedidosPage() {
-  const [orders, setOrders] = useState<Order[]>([])
-  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [dateFilter, setDateFilter] = useState(getColombiaDateString())
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
 
-  const fetchOrders = useCallback(async () => {
-    setLoading(true)
+  const fetchOrdersFn = useCallback(async (): Promise<Order[]> => {
     try {
       const res = await fetch(`/api/orders?date=${dateFilter}`)
       if (res.ok) {
-        const data = await res.json()
-        setOrders(data)
+        return await res.json()
       }
+      return []
     } catch (error) {
       console.error('Error:', error)
-    } finally {
-      setLoading(false)
+      return []
     }
   }, [dateFilter])
 
-  useEffect(() => {
-    fetchOrders()
-    const interval = setInterval(fetchOrders, 10000)
-    return () => clearInterval(interval)
-  }, [fetchOrders])
+  const { data, loading, status, refetch } = useRealtimeQuery<Order[]>({
+    channel: 'admin-orders',
+    tables: ['orders', 'order_items'],
+    fetchFn: fetchOrdersFn,
+    fallbackInterval: 45000,
+  })
+
+  const orders = data ?? []
 
   // Estados del flujo: Mesero crea orden -> Va a cocina -> Listo -> Servido -> Pagado
   const getStatusBadge = (status: string) => {
@@ -126,12 +127,15 @@ export default function PedidosPage() {
             {stats.total} pedidos del día
           </p>
         </div>
-        <button 
-          onClick={fetchOrders}
-          className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"
-        >
-          <RefreshCw className="h-5 w-5 text-gray-600" />
-        </button>
+        <div className="flex items-center gap-2">
+          <ConnectionStatusBadge status={status} onRefresh={refetch} />
+          <button 
+            onClick={() => refetch()}
+            className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50"
+          >
+            <RefreshCw className="h-5 w-5 text-gray-600" />
+          </button>
+        </div>
       </div>
 
       {/* Stats con colores profesionales */}

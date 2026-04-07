@@ -397,6 +397,17 @@ app.get('/health', (req, res) => {
 });
 
 /**
+ * Estado de la conexión Realtime del poller
+ */
+app.get('/realtime-status', (req, res) => {
+  const { getConnectionStatus } = require('./poller');
+  res.json({
+    status: getConnectionStatus(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+/**
  * Abrir caja monedera (conectada a la impresora por LAN)
  * Lo llama el sistema al procesar un cobro.
  */
@@ -628,15 +639,39 @@ app.listen(CONFIG.server.port, CONFIG.server.host, () => {
   console.log(`║  Impresora:  ${CONFIG.printer.ip}:${CONFIG.printer.port}                   ║`);
   console.log('╠══════════════════════════════════════════════════════╣');
   console.log('║  Endpoints disponibles:                              ║');
-  console.log('║    GET  /health         - Estado del servidor        ║');
-  console.log('║    GET  /printer-status - Estado de la impresora     ║');
-  console.log('║    POST /print-kitchen  - Imprimir comanda           ║');
+  console.log('║    GET  /health          - Estado del servidor        ║');
+  console.log('║    GET  /printer-status  - Estado de la impresora     ║');
+  console.log('║    GET  /realtime-status - Estado Realtime/polling    ║');
+  console.log('║    POST /print-kitchen   - Imprimir comanda           ║');
   console.log('║    POST /print-correction - Imprimir correccion      ║');
-  console.log('║    POST /print-test     - Imprimir ticket de prueba  ║');
+  console.log('║    POST /print-test      - Imprimir ticket de prueba  ║');
   console.log('║    POST /print-kitchen-batch - Imprimir multiples    ║');
   console.log('╚══════════════════════════════════════════════════════╝');
   console.log('\n');
   logInfo('Servidor iniciado correctamente');
+
+  // ── Supabase Realtime Poller (principal) ──────────────────────
+  const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+  const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    const { createClient } = require('@supabase/supabase-js');
+    const { startPoller } = require('./poller');
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      realtime: { params: { eventsPerSecond: 10 } }
+    });
+
+    startPoller(supabase, {
+      printKitchen: (data) => printWithRetry(() => printKitchenOrder(data)),
+      printCorrection: (data) => printWithRetry(() => printCorrectionOrder(data)),
+      printerConfig: { ip: CONFIG.printer.ip, port: CONFIG.printer.port }
+    }, logInfo, logError, logSuccess);
+
+    logInfo('Supabase Realtime poller activado');
+  } else {
+    logInfo('Supabase Realtime poller desactivado (configure SUPABASE_URL y SUPABASE_KEY)');
+  }
 
   // Comprobación periódica de conectividad con la impresora (cada 60 s)
   const CHECK_INTERVAL_MS = 60000;

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent } from '@/components/ui'
 import { formatCurrency } from '@/lib/utils'
 import { 
@@ -8,6 +8,7 @@ import {
   CheckCircle, AlertCircle, RefreshCw
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRealtimeQuery } from '@/hooks/useRealtimeQuery'
 
 interface Area {
   id: string
@@ -42,19 +43,11 @@ export default function MesasCajeroPage() {
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date())
 
-  useEffect(() => {
-    fetchTables()
-    const interval = setInterval(fetchTables, 15000)
-    return () => clearInterval(interval)
-  }, [])
-
   const fetchTables = async () => {
     try {
       const res = await fetch('/api/cajero/mesas')
       if (res.ok) {
         const data = await res.json()
-        // El API cajero/mesas devuelve { areas: [...], stats: {...}, orders: [...] }
-        // Cada area tiene .tables con las mesas y sus current_order
         const allTables = (data.areas || []).flatMap((area: any) => 
           (area.tables || []).map((table: any) => ({
             ...table,
@@ -71,6 +64,18 @@ export default function MesasCajeroPage() {
       setLoading(false)
     }
   }
+
+  const fetchTablesFn = useCallback(async () => {
+    await fetchTables()
+    return null
+  }, [])
+
+  useRealtimeQuery<null>({
+    channel: 'cajero-mesas',
+    tables: ['tables', 'orders', 'order_items'],
+    fetchFn: fetchTablesFn,
+    fallbackInterval: 60000,
+  })
 
   const getStatusInfo = (status: string, order?: Table['current_order']) => {
     if (!order) {
